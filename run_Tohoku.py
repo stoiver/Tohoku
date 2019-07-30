@@ -1,5 +1,5 @@
 """
-Script for running simulation of 2011 Tohoku tsunami 
+Script for running simulation of 2011 Tohoku tsunami
 
 Source data such as elevation and boundary data is assumed to be available in
 directories specified by project.py
@@ -25,7 +25,7 @@ import sys
 import anuga
 
 
-from anuga_parallel import distribute, myid, numprocs, finalize, barrier
+from anuga import distribute, myid, numprocs, finalize, barrier
 
 import project
 
@@ -67,7 +67,7 @@ if myid == 0:
     domain.set_name('Tohoku_' + project.scenario) # Name of sww file
     domain.set_datadir(project.output_run)        # Store sww output here
     domain.set_minimum_storable_height(0.01)      # Store only depth > 1cm
-    domain.set_flow_algorithm('tsunami')
+    #domain.set_flow_algorithm('DE0')
 
     #------------------------------------------------------------------------------
     # Setup initial conditions
@@ -98,7 +98,7 @@ domain = distribute(domain,verbose=project.verbose)
 # Parallel Section
 #===============================================================================
 
-domain.set_quantities_to_be_stored({'stage' : 2,                                    
+domain.set_quantities_to_be_stored({'stage' : 2,
                                     'xmomentum' : 2,
                                     'ymomentum' : 2,
                                     'elevation' : 2})
@@ -115,7 +115,7 @@ if myid ==0: print 'running project:', project.scenario
 Bd = anuga.Dirichlet_boundary([tide, 0, 0]) # Mean water level
 Bs = anuga.Transmissive_stage_zero_momentum_boundary(domain) # Neutral boundary
 Bt = anuga.Transmissive_boundary(domain) # Neutral boundary
-Br = anuga.Reflective_boundary(domain) 
+Br = anuga.Reflective_boundary(domain)
 # Boundary conditions for slide scenario
 domain.set_boundary({'ocean_east': Bt,
                          'bottom': Bt,
@@ -134,7 +134,7 @@ hour = 3600
 # source file
 
 # Initial run without any event
-for t in domain.evolve(yieldstep=100, finaltime=100):
+for t in domain.evolve(yieldstep=min, finaltime=hour):
 
     domain.write_time()
         #print domain.boundary_statistics(tags=['ocean_east','onshore'])
@@ -145,4 +145,3 @@ for t in domain.evolve(yieldstep=100, finaltime=100):
     #domain.add_quantity('elevation', filename=project.source_file)
 
 print 'That took %.2f seconds' %(time.time()-t0)
-
