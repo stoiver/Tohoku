@@ -49,8 +49,6 @@ source = num.array([x0, y0, depth, strike, dip, length, width,
 
 source = num.hstack([source, num.zeros((ns,))]).transpose()
 
-print source
-
 # Create domain
 dx = dy = 1000
 L = 80000
