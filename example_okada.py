@@ -41,8 +41,13 @@ elif T == 2:
     rake = [90.0, 90.0]
     ns = 2
 
+#source1 = num.array([x0, y0, depth, strike, dip, length, width,
+#                  slip, rake, num.zeros((ns,))]).transpose()
+
 source = num.array([x0, y0, depth, strike, dip, length, width,
-                  slip, rake, num.zeros((ns,))]).transpose()
+                  slip, rake])
+
+source = num.hstack([source, num.zeros((ns,))]).transpose()
 
 print source
 
