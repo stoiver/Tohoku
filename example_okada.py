@@ -75,7 +75,6 @@ Ts = earthquake_source(
              lon_lat_degrees=False,
              lon_before_lat=True,
              utm_zone=None,
-             #proj4string=None,
              verbose=False)
 
 domain.set_quantity('stage', function=Ts, location='centroids')
