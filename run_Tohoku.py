@@ -134,7 +134,7 @@ hour = 3600
 # source file
 
 # Initial run without any event
-for t in domain.evolve(yieldstep=min, finaltime=hour):
+for t in domain.evolve(yieldstep=5*min, finaltime=4*hour):
 
     domain.write_time()
         #print domain.boundary_statistics(tags=['ocean_east','onshore'])
@@ -144,4 +144,10 @@ for t in domain.evolve(yieldstep=min, finaltime=hour):
     #domain.add_quantity('stage', filename=project.source_file)
     #domain.add_quantity('elevation', filename=project.source_file)
 
+
+domain.sww_merge(delete_old=True)
+
 print 'That took %.2f seconds' %(time.time()-t0)
+
+
+anuga.finalize()
