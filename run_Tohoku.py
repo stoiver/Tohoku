@@ -17,6 +17,8 @@ Stephen Roberts  2012-present
 #------------------------------------------------------------------------------
 # Standard modules
 
+from __future__ import print_function
+
 import os
 from numpy import allclose
 import time
@@ -43,7 +45,7 @@ if myid == 0:
     # overall clipping polygon with a tagged
     # boundary and interior regions as defined in project.py
     #------------------------------------------------------------------------------
-    print 'project name: ', project.name_stem
+    print ('project name: ', project.name_stem)
     domain = anuga.create_domain_from_regions(project.bounding_polygon,
                                         boundary_tags={'bottom': [0],
                                                        'ocean_east': [1],
@@ -56,9 +58,9 @@ if myid == 0:
                                         verbose=True)
 
     # Print some stats about mesh and domain
-    print 'Number of triangles = ', len(domain)
-    print 'The extent is ', domain.get_extent()
-    print domain.statistics()
+    print ('Number of triangles = ', len(domain))
+    print ('The extent is ', domain.get_extent())
+    print (domain.statistics())
 
 
     #------------------------------------------------------------------------------
@@ -106,7 +108,7 @@ domain.set_quantities_to_be_monitored(['stage', 'xmomentum', 'ymomentum'])
 
 
 
-if myid ==0: print 'running project:', project.scenario
+if myid ==0: print ('running project:', project.scenario)
 #------------------------------------------------------------------------------
 # Setup boundary conditions
 #------------------------------------------------------------------------------
@@ -121,7 +123,7 @@ domain.set_boundary({'ocean_east': Bt,
                          'bottom': Bt,
                          'onshore': Br,
                          'top': Bt})
-if myid==0 : print domain.boundary_statistics(tags=['ocean_east','onshore'])
+if myid==0 : print (domain.boundary_statistics(tags=['ocean_east','onshore']))
 #------------------------------------------------------------------------------
 # Evolve system through time
 #------------------------------------------------------------------------------
@@ -147,7 +149,7 @@ for t in domain.evolve(yieldstep=5*min, finaltime=4*hour):
 
 domain.sww_merge(delete_old=True)
 
-print 'That took %.2f seconds' %(time.time()-t0)
+print ('That took %.2f seconds' %(time.time()-t0))
 
 
 anuga.finalize()

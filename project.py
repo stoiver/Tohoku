@@ -1,14 +1,20 @@
 """ Common filenames and locations for topographic data, meshes and outputs.
     This file defines the parameters of the scenario you wish to run.
 """
+
+from __future__ import print_function
 import os, sys
 from os.path import join
 import anuga
 from anuga.geometry.polygon import plot_polygons
+
+
+
 #------------------------------------------------------------------------------
 # Define scenario 
 #------------------------------------------------------------------------------
-scenario = 'okada'
+#scenario = 'okada'
+scenario = 'Fujii'
 #------------------------------------------------------------------------------
 # Filenames
 #------------------------------------------------------------------------------
@@ -33,7 +39,7 @@ verbose= True
 # bounding polygon for study area
 bounding_polygon = anuga.read_polygon('polygons/bounding_n.csv')
 A = anuga.polygon_area(bounding_polygon) / 1000000.0
-print 'Area of bounding polygon = %.2f km^2' % A
+print ('Area of bounding polygon = %.2f km^2' % A)
 
 #------------------------------------------------------------------------------
 # Interior region definitions
@@ -61,16 +67,16 @@ build_regions = [poly_level1, poly_level2]
 interior_regions = [[poly_level1, res_level1],[poly_level2, res_level2], [poly_level3, res_level3]]
 number_triangles=anuga.geometry.polygon.number_mesh_triangles(interior_regions,bounding_polygon,res_whole)
 
-print 'Number of triangles: %s'%number_triangles
+print ('Number of triangles: %s'%number_triangles)
 
 # Define directory
 
 output_folder = os.getcwd() 
 output_run = join(output_folder, '_output')+'_'+ scenario
-print 'output directory: %s'%output_run 
+print ('output directory: %s'%output_run) 
 source_folder=join(os.getcwd(),'sources')
 source_file=join(source_folder,scenario+'.pts')
-print 'source directory: %s'%source_file
+print ('source directory: %s'%source_file)
 
 
 
