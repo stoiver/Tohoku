@@ -2,7 +2,7 @@ import numpy as num
 
 #from anuga.tsunami_source.tsunami_okada import earthquake_tsunami
 
-from anuga.tsunami_source.okada_tsunami import earthquake_source
+#from anuga.tsunami_source.okada_tsunami import earthquake_source
 
 import anuga
 
@@ -14,45 +14,42 @@ rectangular sources
 
 
 # Choose what test to proceed
-T = 1
+T = 2
 
 if T == 1:
     # Initial condition of earthquake for multiple source
-    x0 = 40000.0
-    y0 = 40000.0
-    depth = 15.0
-    strike = 0.0
-    dip = 15.0
-    length = 20.0
-    width = 6.0
-    slip = 10.0
-    rake = 90.0
-    ns = 1
+    params = dict(
+        xoff   = 400000, 
+        yoff   = 400000,
+        depth  = 15000.0, 
+        length = 100000.0, 
+        width  = 60000.0, 
+        slip   = 10.0, 
+        opening= 0.0, 
+        strike = 180.0, 
+        dip    = 15.0, 
+        rake   = 90.0,
+        nu     = 0.25)
 elif T == 2:
     # Initial condition of earthquake for multiple source
-    x0 = [40000.0, 40000.0]
-    y0 = [45000.0, 35000.0]
-    depth = [15.0, 15.0]
-    strike = [0.0, 0.0]
-    dip = [15.0, 15.0]
-    length = [10.0, 10.0]
-    width = [6.0, 6.0]
-    slip = [10.0, 10.0]
-    rake = [90.0, 90.0]
-    ns = 2
+    params = dict(
+        xoff   =[400000.0, 400000.0], 
+        yoff   =[450000.0, 350000.0],
+        depth  =[15000.0, 15000.0], 
+        length =[10000.0, 10000.0], 
+        width  =[6000.0, 6000.0], 
+        slip   =[10.0, 10.0], 
+        opening=[0.0, 0.0], 
+        strike =[0.0, 0.0], 
+        dip    =[15.0, 15.0], 
+        rake   =[90.0, 90.0],
+        nu     =0.25)
 
-#source1 = num.array([x0, y0, depth, strike, dip, length, width,
-#                  slip, rake, num.zeros((ns,))]).transpose()
-
-source = num.array([x0, y0, depth, strike, dip, length, width,
-                  slip, rake])
-
-source = num.hstack([source, num.zeros((ns,))]).transpose()
 
 # Create domain
-dx = dy = 1000
-L = 80000
-W = 80000
+dx = dy = 10000
+L = 800000
+W = 800000
 
 
 # Create topography
@@ -66,28 +63,28 @@ domain = anuga.rectangular_cross_domain(int(L/dx), int(W/dy), len1=L, len2=W)
 domain.set_name('test')
 domain.set_quantity('elevation', function=topography, location='centroids')
 
-# Ts = earthquake_tsunami(ns=ns, NSMAX=NSMAX, length=length, width=width,
-#                         strike=strike, depth=depth, dip=dip,
-#                         xi=x0, yi=y0, z0=0, slip=slip, rake=rake,
-#                         domain=domain, verbose=False)
 
+def tsunami_function(x,y):
+    import okada
 
-Ts = earthquake_source(
-             source=source,
-             domain=domain,
-             lon_lat_degrees=False,
-             lon_before_lat=True,
-             utm_zone=None,
-             verbose=False)
+    params['x'] = x
+    params['y'] = y
 
-domain.set_quantity('stage', function=Ts, location='centroids')
+    #import pprint
+    #pprint.pprint(params)
+
+    ue,un,uz = okada.forward(**params)
+
+    return uz
+
+domain.set_quantity('stage', function=tsunami_function, location='centroids')
 
 
 dplotter = anuga.Domain_plotter(domain)
 
-print num.max(dplotter.stage), num.min(dplotter.stage)
-print num.max(dplotter.elev), num.min(dplotter.elev)
-print num.max(dplotter.depth), num.min(dplotter.depth)
+print (num.max(dplotter.stage), num.min(dplotter.stage))
+print (num.max(dplotter.elev), num.min(dplotter.elev))
+print (num.max(dplotter.depth), num.min(dplotter.depth))
 
 
-dplotter.plot_stage_frame(vmin=-3.0, vmax=8.0)
+dplotter.plot_stage_frame(vmin=-0.2, vmax=0.2)

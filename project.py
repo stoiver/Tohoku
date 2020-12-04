@@ -14,7 +14,11 @@ from anuga.geometry.polygon import plot_polygons
 # Define scenario 
 #------------------------------------------------------------------------------
 #scenario = 'okada'
-scenario = 'Fujii'
+#scenario = 'Fujii'
+#scenario = 'Ammon'
+#scenario = 'Hayes'
+#scenario = 'UCSB3'
+scenario = 'Caltech'
 #------------------------------------------------------------------------------
 # Filenames
 #------------------------------------------------------------------------------

@@ -80,13 +80,15 @@ if myid == 0:
                         verbose=project.verbose,
                         alpha=0.1)
 
-
     domain.set_quantity('stage', tide)
-    domain.set_quantity('friction', 0.0)
+
+
     domain.add_quantity('stage',
                         filename=project.source_file,
                         use_cache=True,
                         verbose=project.verbose)
+
+    domain.set_quantity('friction', 0.0)
 else:
     domain = None
 

@@ -10,9 +10,9 @@ from scipy.interpolate import interp2d
 #from anuga.abstract_2d_finite_volumes.mesh_factory import rectangular_cross
 #from anuga.abstract_2d_finite_volumes.quantity import Quantity
 #from matplotlib.mlab import griddata
-sys.path.append("/usr/lib64/python2.6/dist-packages/")
+#sys.path.append("/usr/lib64/python2.6/dist-packages/")
 from scipy.interpolate import griddata
-from Scientific.IO.NetCDF import NetCDFFile
+from netcdf4 import NetCDFFile
 from pyproj import Proj
 
 
