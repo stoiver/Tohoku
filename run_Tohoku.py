@@ -116,15 +116,20 @@ if myid ==0: print ('running project:', project.scenario)
 #------------------------------------------------------------------------------
 #print 'Available boundary tags', domain.get_boundary_tags()
 
+def tide_fun(t):
+    return tide
+
 Bd = anuga.Dirichlet_boundary([tide, 0, 0]) # Mean water level
-Bs = anuga.Transmissive_stage_zero_momentum_boundary(domain) # Neutral boundary
+#Bs = anuga.Transmissive_stage_zero_momentum_boundary(domain) # Neutral boundary
+Bs = anuga.Transmissive_n_momentum_zero_t_momentum_set_stage_boundary(domain,tide_fun)
+Bf = anuga.Flather_external_stage_zero_velocity_boundary(domain,tide_fun)
 Bt = anuga.Transmissive_boundary(domain) # Neutral boundary
 Br = anuga.Reflective_boundary(domain)
 # Boundary conditions for slide scenario
-domain.set_boundary({'ocean_east': Bt,
-                         'bottom': Bt,
+domain.set_boundary({'ocean_east': Bf,
+                         'bottom': Bf,
                          'onshore': Br,
-                         'top': Bt})
+                         'top': Bf})
 if myid==0 : print (domain.boundary_statistics(tags=['ocean_east','onshore']))
 #------------------------------------------------------------------------------
 # Evolve system through time

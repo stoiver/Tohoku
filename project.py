@@ -15,10 +15,10 @@ from anuga.geometry.polygon import plot_polygons
 #------------------------------------------------------------------------------
 #scenario = 'okada'
 #scenario = 'Fujii'
-#scenario = 'Ammon'
+scenario = 'Ammon'
 #scenario = 'Hayes'
 #scenario = 'UCSB3'
-scenario = 'Caltech'
+#scenario = 'Caltech'
 #------------------------------------------------------------------------------
 # Filenames
 #------------------------------------------------------------------------------
