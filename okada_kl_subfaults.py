@@ -3,34 +3,27 @@ import okada
 import numpy as np
 
 
-def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001):
+def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001,
+                depth=32000.0,
+                length=300000,
+                width=150000,
+                strike=195.0,
+                dip=14.0,
+                rake=87.0,
+                nu=0.25,
+                slip = 20.0,
+                opening = 0.0,
+               ):
     """
-    Calculate sea bed deformations due to a KL defined random slip field on a fault satisying 
-    the following parameters
+    Calculate sea bed deformations due to a KL defined random slip field on a fault. THe 
+    default values are appropriate for the Tohoku earth quake.
     """
-
-    # Set up common fault parameters appropriate for Tohoku earth quake
-
-    depth=32000.0
-    length=300000
-    width=150000
-    strike=195.0
-    dip=14.0
-    rake=87.0
-    nu=0.25
-
-
-    #slip=62.0
-    #
-    # opening=10.0
-
-    slip = 20.0
-    opening = 0.0
+    
 
     # Calculate subfault coordinates
     epicenters_E, epicenters_N, epicenters_D = subfaults(E_subfault, N_subfault, dip, strike, length, width)
 
-
+    # Create Karhunen–Loève expansion
     slips, _, _, _,   = kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed)
     #slips    = slip*np.ones_like(epicenters_E)
     openings = opening*np.ones_like(epicenters_E)

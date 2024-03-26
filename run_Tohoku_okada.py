@@ -17,8 +17,6 @@ Stephen Roberts  2012-present
 #------------------------------------------------------------------------------
 # Standard modules
 
-from __future__ import print_function
-
 import os
 from numpy import allclose
 import time
@@ -89,12 +87,14 @@ if myid == 0:
     domain.set_quantity('stage', tide)
 
 
-    # Run one instance of the okada KL field
+    # Run one instance of the okada KL field as defined by the choice of iseed
     import okada_kl_subfaults as okl
 
     x = domain.centroid_coordinates[:,0]
     y = domain.centroid_coordinates[:,1]
 
+    
+    # THe default argument values are appropriate for the Tohoku earth quake
     uE,uN,uZ,slips = okl.deformation(x, y, xoff=300000.0, yoff=250000.0, E_subfault=5, N_subfault=10, iseed=1001)
     
     

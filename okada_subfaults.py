@@ -52,8 +52,8 @@ def subfaults(E_subfault, N_subfault, dip, strike, length, width):
     Given the coordinate of the fault is (0,0,0), find out the coordinates of subfaults after rotation.
     E_subfault denote the number of subfaults in a row from east to west, 
     N_subfault denote the number of subfaults in a row from north to south
-    L_north: length North
-    W_east: width East
+    length: length North
+    width: width East
 
     epicenters_E denote the E_axis of the center of these subfaults, 
     epicenters_N denote the N_axis of the center of these subfaults.
