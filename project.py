@@ -14,8 +14,8 @@ from anuga.geometry.polygon import plot_polygons
 # Define scenario 
 #------------------------------------------------------------------------------
 #scenario = 'okada'
-#scenario = 'Fujii'
-scenario = 'Ammon'
+scenario = 'Fujii'
+#scenario = 'Ammon'
 #scenario = 'Hayes'
 #scenario = 'UCSB3'
 #scenario = 'Caltech'
@@ -61,7 +61,7 @@ poly_level3 = anuga.read_polygon('polygons/bounding_inundation.csv')
 # Define resolutions (max area per triangle) for each polygon
 
 rfact = 30
-res_whole   =  6000000*rfact 
+res_whole   =   500000*rfact 
 res_level1  =   500000*rfact  
 res_level2  =   120000*rfact 
 res_level3  =    20000*rfact 
