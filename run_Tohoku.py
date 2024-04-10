@@ -17,7 +17,6 @@ Stephen Roberts  2012-present
 #------------------------------------------------------------------------------
 # Standard modules
 
-from __future__ import print_function
 
 import os
 from numpy import allclose
