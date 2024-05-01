@@ -41,7 +41,9 @@ verbose= True
 # Domain definitions
 #------------------------------------------------------------------------------
 # bounding polygon for study area
-bounding_polygon = anuga.read_polygon('polygons/bounding_n.csv')
+#bounding_polygon = anuga.read_polygon('polygons/bounding_n.csv')
+bounding_polygon = anuga.read_polygon('polygons/bounding_extended.csv')
+
 A = anuga.polygon_area(bounding_polygon) / 1000000.0
 print ('Area of bounding polygon = %.2f km^2' % A)
 
