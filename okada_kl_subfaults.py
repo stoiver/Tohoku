@@ -1,9 +1,10 @@
 
 import okada
 import numpy as np
+verbose = False
 
 
-def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001,
+def kl_deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=None,
                 depth=32000.0,
                 length=300000,
                 width=150000,
@@ -15,7 +16,7 @@ def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001,
                 opening = 0.0,
                ):
     """
-    Calculate sea bed deformations due to a KL defined random slip field on a fault. THe 
+    Calculate sea bed deformations due to a KL defined random slip field on a fault. The 
     default values are appropriate for the Tohoku earth quake.
     """
     
@@ -23,9 +24,9 @@ def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001,
     # Calculate subfault coordinates
     epicenters_E, epicenters_N, epicenters_D = subfaults(E_subfault, N_subfault, dip, strike, length, width)
 
-    # Create Karhunen–Loève expansion
-    slips, _, _, _,   = kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed)
-    #slips    = slip*np.ones_like(epicenters_E)
+    # Create Karhunen–Loève correlation matrices
+    slips, D, V, z, C_hat = kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed)
+
     openings = opening*np.ones_like(epicenters_E)
 
     # initialise the value of the sum of the displacement of each subfaults
@@ -61,9 +62,10 @@ def deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=1001,
             uN_sum=uN_sum+uN
             uZ_sum=uZ_sum+uZ
 
-    print(50*'=')
-    print(np.max(uZ_sum))
-    print(np.min(uZ_sum))
+    if verbose:
+        print(50*'=')
+        print(np.max(uZ_sum))
+        print(np.min(uZ_sum))
 
     return uE_sum, uN_sum, uZ_sum, slips
 
@@ -108,9 +110,7 @@ def subfaults(E_subfault, N_subfault, dip, strike, length, width):
                   
     return epicenters_E, epicenters_N, epicenters_D
 
-
-
-def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed=1001):
+def kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, width, slip):
 
     from math import exp, sqrt
     from numpy import linalg as LA
@@ -128,6 +128,7 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
 
     mu=slip
 
+    # parameters to define correlation function
     alpha=0.75
     sigma=alpha*mu
     r0=0.2*width
@@ -141,13 +142,29 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
     
     D,V = LA.eig(C_hat)
 
-    idx = D.argsort()[::-1]   
+    idx = D.argsort()[::-1]
+      
     D = D[idx]
     V = V[:,idx]
     D = np.diag(D)
     sqrtD = np.sqrt(D)
 
-    np.random.seed(iseed)
+    return mu, n, m, D, V, sqrtD, C_hat
+
+
+def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed=None):
+
+    from math import exp, sqrt
+    from numpy import linalg as LA
+
+ 
+    mu, n, m, D, V, sqrtD, C_hat = kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, width, slip)
+
+    N = len(D)
+
+    if iseed is not None:
+        np.random.seed(iseed)
+
     z=np.random.normal(size=(N,1))
 
     #print(mu)
@@ -157,5 +174,5 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
 
     s = np.reshape(s,(n,m))
 
-    return s, D, V, z
+    return s, D, V, z, C_hat
 
