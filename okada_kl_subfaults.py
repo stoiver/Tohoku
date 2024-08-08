@@ -4,7 +4,7 @@ import numpy as np
 verbose = False
 
 
-def kl_deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=None,
+def kl_deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, sample='random', iseed=None,
                 depth=32000.0,
                 length=300000,
                 width=150000,
@@ -25,7 +25,7 @@ def kl_deformation(x, y, xoff=0, yoff=0, E_subfault=10, N_subfault=10, iseed=Non
     epicenters_E, epicenters_N, epicenters_D = subfaults(E_subfault, N_subfault, dip, strike, length, width)
 
     # Create Karhunen–Loève correlation matrices
-    slips, D, V, z, C_hat = kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed)
+    slips, D, V, z, C_hat = kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, sample, iseed)
 
     openings = opening*np.ones_like(epicenters_E)
 
@@ -152,20 +152,29 @@ def kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, wi
     return mu, n, m, D, V, sqrtD, C_hat
 
 
-def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, iseed=None):
+def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, sample='random', iseed=None):
 
     from math import exp, sqrt
     from numpy import linalg as LA
+    from scipy.stats import qmc
 
- 
+    if sample == 'sobol':
+        sobol_sampler = qmc.Sobol(size=(N,1))
+
     mu, n, m, D, V, sqrtD, C_hat = kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, width, slip)
 
     N = len(D)
 
-    if iseed is not None:
-        np.random.seed(iseed)
-
-    z=np.random.normal(size=(N,1))
+    if sample is not None:
+        if sample == 'random':
+            if iseed is not None:
+                np.random.seed(iseed)
+            z = np.random.normal(size=(N,1))
+        elif sample == 'sobol':
+            z = sobol_sampler.random()
+        elif sample.shape == (N,1):
+            z = sample
+ 
 
     #print(mu)
     #print(z)
