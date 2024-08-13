@@ -62,8 +62,8 @@ poly_level3 = anuga.read_polygon('polygons/bounding_inundation.csv')
 
 # Define resolutions (max area per triangle) for each polygon
 
-rfact = 30
-#rfact = 100
+rfact = 30  # approx 87000 triangles
+#rfact = 100  # approx 29000 triangles
 res_whole   =   500000*rfact 
 res_level1  =   500000*rfact  
 res_level2  =   120000*rfact 

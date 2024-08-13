@@ -158,23 +158,28 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
     from numpy import linalg as LA
     from scipy.stats import qmc
 
-    if sample == 'sobol':
-        sobol_sampler = qmc.Sobol(size=(N,1))
-
     mu, n, m, D, V, sqrtD, C_hat = kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, width, slip)
 
     N = len(D)
 
-    if sample is not None:
-        if sample == 'random':
-            if iseed is not None:
-                np.random.seed(iseed)
-            z = np.random.normal(size=(N,1))
-        elif sample == 'sobol':
-            z = sobol_sampler.random()
-        elif sample.shape == (N,1):
-            z = sample
- 
+    try:
+        sample.shape == (N,1)
+        z = sample
+    except:
+        if sample == 'sobol':
+            sobol_sampler = qmc.Sobol(d=N, scramble=True, seed=iseed)
+
+        if sample is not None:
+            if sample == 'random':
+                if iseed is not None:
+                    np.random.seed(iseed)
+                z = np.random.normal(size=(N,1))
+            elif sample == 'sobol':
+                z = (sobol_sampler.random()).reshape((N,1))
+            else:
+                msg = 'Unknown sample type %s' % sample
+                raise ValueError(msg)
+    
 
     #print(mu)
     #print(z)
