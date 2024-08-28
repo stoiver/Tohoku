@@ -4,10 +4,13 @@ import anuga
 import numpy as np
 import okada_kl_subfaults as okl
 
-def create_domain():
+def create_domain(sample_id=0):
 
     import project
     print ('project name: ', project.name_stem)
+
+    domain_name = f'tohoku_source_example_{int(sample_id):03d}'
+    print (f'project domain name: {domain_name}') 
 
     domain = anuga.create_domain_from_regions(project.bounding_polygon,
                                             boundary_tags={'bottom': [0],
@@ -35,7 +38,7 @@ def create_domain():
                             verbose=False,
                             alpha=0.1)
 
-    domain.set_name('tohoku_source_example')
+    domain.set_name(domain_name)
 
 
     #tide = -0.45
