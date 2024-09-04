@@ -85,6 +85,8 @@ def apply_deformation(domain, z, parameters, x0, y0, E_subfault, N_subfault):
 
 def evolve_domain(domain, gauges):
 
+    tide = 0.0
+
     # Setup boundaries
     Br = anuga.Reflective_boundary(domain)
     Bf = anuga.Flather_external_stage_zero_velocity_boundary(domain,lambda t :tide)
@@ -98,8 +100,6 @@ def evolve_domain(domain, gauges):
     from anuga.operators.collect_max_quantities_operator import Collect_max_quantities_operator
     max_min_collector = Collect_max_quantities_operator(domain)
 
-    tide = 0.0
-
     # Evolve system through time
     import time
     t0 = time.time()
@@ -108,18 +108,16 @@ def evolve_domain(domain, gauges):
 
     
     gauge_series = {}
+    gauge_keys = [21418, 0, 1, 2]
 
-    for key in [21418, 0, 1, 2]:
+    for key in gauge_keys:
         gauge_series[key] = Gauge_series(gauges[key], domain)
-
-
-
 
 
     # Initial run without any event
     for t in domain.evolve(yieldstep=2*min, finaltime=2.0*hour):
 
-        for key in [21418, 0, 1, 2]:
+        for key in gauge_keys:
             gauge_series[key].append_stage()
 
         domain.print_timestepping_statistics()
