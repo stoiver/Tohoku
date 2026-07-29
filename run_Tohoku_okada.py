@@ -95,7 +95,7 @@ if myid == 0:
 
     
     # THe default argument values are appropriate for the Tohoku earth quake
-    uE,uN,uZ,slips = okl.deformation(x, y, xoff=300000.0, yoff=250000.0, E_subfault=5, N_subfault=10, iseed=1001)
+    uE,uN,uZ,slips = okl.kl_deformation(x, y, xoff=300000.0, yoff=250000.0, E_subfault=5, N_subfault=10, iseed=1001)
     
     
 
