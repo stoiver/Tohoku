@@ -1,0 +1,22 @@
+# anuga_sww_gui configuration — Tohoku example
+
+[file]
+sww = "/home/steve/Tohoku/tohoku_source_example_001.sww"
+
+[render]
+qty = "stage"
+vmin = -10.0
+vmax = 10.0
+cmap = "RdBu_r"
+cmap_reverse = false
+mindepth = 0.001
+flat_view = false
+
+[generate]
+outdir = "/home/steve/Tohoku/_plot"
+dpi = 100
+stride = 1
+alpha = 0.6
+epsg = 32654
+basemap = true
+basemap_provider = "OpenStreetMap"
