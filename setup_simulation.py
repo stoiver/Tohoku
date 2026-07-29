@@ -25,8 +25,7 @@ def create_domain(sample_id=0):
 
 
 
-    domain.set_hemisphere('northern')
-    domain.set_zone(54)
+    domain.set_epsg(32654)  # WGS 84 / UTM zone 54N
     
     print ('Number of triangles = ', len(domain))
     print ('The extent is ', domain.get_extent())
