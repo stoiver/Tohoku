@@ -1,3 +1,21 @@
+# Python
 *.pyc
+__pycache__/
 .ipynb_checkpoints
 
+# ANUGA simulation output
+*.sww
+*.msh
+anuga_*.log
+
+# Per-run and rendering output directories
+_output_*/
+_plot/
+screenshots/
+
+# Downloaded / derived rasters and basemap exports.
+# Note: the *input* elevation (Tohoku.pts, sources/*.pts) is tracked and
+# must NOT be ignored -- only downloaded and generated rasters go here.
+*.tif
+*.georef
+tohoku_open_dem*.jpg

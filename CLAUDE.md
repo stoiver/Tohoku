@@ -95,7 +95,7 @@ It renders `stage` over an OpenStreetMap/satellite basemap (`epsg = 32654` match
 - **Mesh caching differs between entry points.** `run_Tohoku_okada.py` calls `create_domain_from_regions(..., use_cache=True)` while `setup_simulation.create_domain()` uses `use_cache=False`; both write to the same `project.meshname`. After changing `rfact` or the polygons, delete `Tohoku_<scenario>_.msh` to be sure the mesh is rebuilt.
 - **Different scripts run different durations.** `run_Tohoku_okada.py` evolves 4 hours at a 5-minute yieldstep with `tide = -0.45`; `setup_simulation.evolve_domain()` evolves 2 hours at 2 minutes with `tide = 0.0`. Don't compare their outputs without accounting for this.
 - **`evolve_domain()` expects specific gauge keys** — it iterates `[21418, 0, 1, 2]`, so the `gauges` dict passed in must contain all four.
-- **`.gitignore` only covers `*.pyc` and `.ipynb_checkpoints`.** Large generated artefacts (`.sww`, `.msh`, `_plot/`, `_output_*/`, `anuga_*.log`, downloaded DEMs) show up as untracked in `git status` and should not be committed.
+- **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
 ## Dependencies
 
@@ -112,7 +112,7 @@ pytest --pyargs anuga              # full suite, ~3 min
 
 ## Data Files
 
-- `Tohoku.pts` — combined bathymetry/topography (proprietary, ~32 MB, not in git; required by every script that isn't the open-elevation notebook)
+- `Tohoku.pts` — combined bathymetry/topography, required by every script except the open-elevation notebook. Tracked in git at **31 MB** (NetCDF binary, so it barely compresses) and by far the largest object in the repo; it dominates clone time. Leave it alone — it is deliberately *not* in `.gitignore`, and removing it now would need a history rewrite.
 - `polygons/*.csv` — boundary and interior mesh polygons in UTM coordinates. Only four are live in `project.py` (`bounding_extended`, `polygon_new1`, `bounding_gps`, `bounding_inundation`); the rest are historical alternatives.
 - `sources/*.pts` — pre-computed earthquake source deformation fields, one per scenario
 - `21418_notide.txt` — de-tided DART buoy 21418 observations used to validate the modelled wave
