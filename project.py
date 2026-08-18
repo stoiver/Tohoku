@@ -62,14 +62,17 @@ poly_level3 = anuga.read_polygon('polygons/bounding_inundation.csv')
 
 # Define resolutions (max area per triangle) for each polygon
 
-#rfact = 30  # approx 87000 triangles
-rfact = 100  # approx 24807 triangles
-#rfact = 60   # approx 44034 triangles
+# Triangle counts below are for the res_level3 divisor in force at the time.
+# With res_level3 = 20000*rfact:  rfact 30 -> ~87000, 60 -> ~44000, 100 -> ~24800.
+# With res_level3 =  2000*rfact (current), rfact 30 -> ~355000.
+rfact = 30
+#rfact = 100
+#rfact = 60
 res_whole   =   500000*rfact 
 res_whole   =   500000*rfact 
 res_level1  =   500000*rfact  
 res_level2  =   120000*rfact 
-res_level3  =    20000*rfact 
+res_level3  =     2000*rfact   # 10x finer than the other regions: inundation
 
 # Define list of interior regions with associated resolutions
 build_regions = [poly_level1, poly_level2]
