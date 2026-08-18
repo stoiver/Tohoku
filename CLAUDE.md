@@ -46,7 +46,7 @@ jupyter notebook notebook_tohoku_source_example.ipynb
 ### Configuration (`project.py`)
 Central config module imported by all simulation scripts. There is no CLI or config file — **you change a scenario by editing the module-level variables and re-running**, and `project.py` prints polygon area / triangle count as an import side effect. Controls:
 - `scenario` — which earthquake source to use (`Caltech`, `Fujii`, `Ammon`, `Hayes`, `UCSB3`, `okada`); selected by uncommenting one of the assignments
-- `rfact` — inverse mesh-resolution factor scaling all four `res_*` triangle areas. Larger `rfact` = coarser. The commented values record measured triangle counts: `rfact=30`→~87 000, `rfact=60`→~44 000, `rfact=100`→~24 800 (current)
+- `rfact` — inverse mesh-resolution factor scaling all four `res_*` triangle areas. Larger `rfact` = coarser. Triangle counts depend on the `res_level3` divisor as well: with the historical `res_level3 = 20000*rfact`, `rfact=30`→~87 000, `rfact=60`→~44 000, `rfact=100`→~24 800. `res_level3` is now `2000*rfact` (10× finer inundation region) with `rfact = 30` (current) → ~355 000 triangles, so a full run takes minutes rather than seconds; `rfact = 100` is still there commented out for a fast path
 - `interior_regions` — nested refinement polygons `poly_level1/2/3` read from `polygons/*.csv`
 - `meshname` = `Tohoku_<scenario>_.msh`, `output_run` = `_output_<scenario>`, `source_file` = `sources/<scenario>.pts`
 
@@ -71,6 +71,7 @@ Central config module imported by all simulation scripts. There is no CLI or con
 | `okada_kl_subfaults.py` | Extends `okada_subfaults` with a KL-based random slip field for uncertainty quantification; `kl_deformation()` is the main entry point |
 | `setup_simulation.py` | Higher-level helpers: `create_domain()`, `apply_deformation()`, `evolve_domain()`, and gauge recording classes |
 | `project.py` | Scenario parameters, mesh polygons, resolution settings |
+| `tsunami_observations.py` | Loads the TTJS surveyed inundation/run-up heights for validation; subsetting by UTM extent or by gauge |
 
 ### Coordinate system
 All simulations use **UTM Zone 54N**, set with `domain.set_epsg(32654)`. This replaced the older `domain.set_hemisphere('northern')` + `domain.set_zone(54)` pair — use `set_epsg` in new code. The two are equivalent for zone/hemisphere/EPSG, with one difference: `set_epsg` also populates `false_easting` from pyproj (0 → 500000, the correct UTM value), which is metadata written into `.sww` and surfaces as `Xshift` in `.prj` files produced by `sww2dem` (used by `ExportResults.py`). Note the ordering rule if you ever go back to the old calls — `set_zone` defaults the hemisphere to *southern* when it is still undefined, so `set_hemisphere` must come first.
@@ -118,6 +119,7 @@ pytest --pyargs anuga              # full suite, ~3 min
 - `polygons/*.csv` — boundary and interior mesh polygons in UTM coordinates. Only four are live in `project.py` (`bounding_extended`, `polygon_new1`, `bounding_gps`, `bounding_inundation`); the rest are historical alternatives.
 - `sources/*.pts` — pre-computed earthquake source deformation fields, one per scenario
 - `21418_notide.txt` — de-tided DART buoy 21418 observations used to validate the modelled wave
+- `observations/ttjs_survey_20121229.csv` — the 2011 Tohoku Earthquake Tsunami Joint Survey (TTJS) nationwide field survey: 5907 measured inundation/run-up heights, tide-corrected, 31.5-43.7 N. Downloaded from <http://www.coastal.jp/ttjt/> and converted Shift-JIS -> UTF-8. Loaded by `tsunami_observations.py` (`load_ttjs`, `in_extent`, `near`), which also re-downloads it and the NOAA NCEI run-up records. The survey group's terms require citing them and the release date — see `observations/README.md`. Used by the validation section of `notebook_tohoku_open_elevation.ipynb`.
 - `build_elevation.py` — legacy Python 2 script for building `Tohoku.pts` from raw topo files. **Does not run** (`SyntaxError` on Python 2 `print` statements) and its docstring still refers to a Darwin, NT scenario.
 
 ### Open elevation data
