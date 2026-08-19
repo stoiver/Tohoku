@@ -139,13 +139,24 @@ def kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, wi
             C_hat[i,j] = sigma**2 * exp(-K/r0)
 
     #print(C_hat)
-    
-    D,V = LA.eig(C_hat)
+
+    # C_hat is a symmetric positive-semidefinite covariance matrix, so use the
+    # symmetric solver.  LA.eig() calls the general LAPACK routine (dgeev),
+    # which does not exploit symmetry and may return complex-conjugate
+    # eigenpairs for near-degenerate eigenvalues -- rounding-dependent, so it
+    # can surface on one platform and not another (it crashed on macOS with
+    # Accelerate while staying real on Linux with OpenBLAS).  Complex D and V
+    # then propagate through sqrtD into the slip field and on into okada().
+    # LA.eigh() cannot return complex, and is more accurate here besides.
+    D,V = LA.eigh(C_hat)
 
     idx = D.argsort()[::-1]
       
     D = D[idx]
     V = V[:,idx]
+    # PSD in exact arithmetic, but rounding can leave eigenvalues at ~-1e-15,
+    # and np.sqrt of those is NaN.
+    D = np.clip(D, 0.0, None)
     D = np.diag(D)
     sqrtD = np.sqrt(D)
 
@@ -175,7 +186,13 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
                     np.random.seed(iseed)
                 z = np.random.normal(size=(N,1))
             elif sample == 'sobol':
-                z = (sobol_sampler.random()).reshape((N,1))
+                # The KL expansion needs standard normal deviates.  Sobol
+                # points are uniform on [0,1), so map them through the normal
+                # quantile function; feeding the raw uniforms in gives every
+                # mode a coefficient with mean 0.5 instead of 0, which biases
+                # the slip field upward and truncates its tails.
+                from scipy.stats import norm
+                z = norm.ppf(sobol_sampler.random()).reshape((N,1))
             else:
                 msg = 'Unknown sample type %s' % sample
                 raise ValueError(msg)

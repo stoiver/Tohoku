@@ -8,7 +8,15 @@ This repository simulates the 2011 Tohoku tsunami using the [ANUGA](https://gith
 
 ## Environment
 
-ANUGA is installed editable from `~/anuga_core` into the conda env `anuga_env_3.14`, which `.bashrc` activates by default (currently `anuga 3.3.8.dev`). This repo is a *scenario* repo — it has no build step, no package, and no test suite of its own.
+ANUGA is installed editable from `~/anuga_core` into the conda env `anuga_env_3.14`, which `.bashrc` activates by default (currently `anuga 3.3.8.dev`). This repo is a *scenario* repo — it has no build step and no package.
+
+It does have a small test suite for the source-model code, which needs only `numpy`, `scipy`, `matplotlib` and `pytest` — **no ANUGA** — so it runs anywhere in a couple of seconds:
+
+```bash
+python -m pytest tests -v
+```
+
+`tests/test_okada.py` covers the Okada dislocation model (linearity in slip, zero-slip, decay with distance, subfault summation against the single-fault solution); `tests/test_okada_kl.py` covers the KL slip field, including regression guards for two bugs that were live in the repo — see *Gotchas*. `.github/workflows/tests.yml` runs them on push and PR across **ubuntu-latest and macos-latest**. The macOS leg is not decoration: the complex-eigenvalue bug reproduced only there, and with it reinstated the whole suite still passes on Linux.
 
 **Always run scripts and notebooks from the repository root.** `project.py` resolves `topo/`, `sources/` and the output directory with `os.getcwd()`, so running from elsewhere silently produces wrong paths. The notebooks begin with a `try: os.chdir('Tohoku')` guard for the case where Jupyter was started one level up.
 
@@ -96,6 +104,19 @@ It renders `stage` over an OpenStreetMap/satellite basemap (`epsg = 32654` match
 
 Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the inundation close-up box, alongside the DART 21418 peak (observed 1.87 m at 33 min). *K* is the geometric mean of observed/modelled, so **K = 1 is unbiased and K < 1 means the model runs high**; *&kappa;* is the geometric standard deviation, i.e. the typical scatter factor. `tsunami_observations.py` loads the survey; the notebook's validation section does the scoring.
 
+### Notebook defaults
+
+`notebook_tohoku_open_elevation.ipynb` ships `slip = 81`, `friction = 0.03`, `elevation_source = 'open'`: DART peak 1.86 m against 1.87 m observed, **K = 0.95**, κ = 1.69, bias +0.45 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and cannot be — see the κ floor below.
+
+**Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
+
+1. set `slip` from the DART 21418 peak, then
+2. set `friction` from Aida K against the survey.
+
+At slip 81: n = 0.03 → K = 0.95, κ = 1.69, bias +0.45 m; n = 0.035 → K = 1.08, bias −0.07 m; n = 0.04 → K = 1.24, bias −0.56 m. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
+
+These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — see *Gotchas*. Before those fixes the notebook used slip 60 with n = 0.04; that pairing is meaningless now, since the old uniform-deviate bug inflated the slip field and the same settings give K = 1.54 with a DART peak of 1.38 m against the corrected code.
+
 ### Best configuration found
 
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
@@ -156,6 +177,7 @@ Fault-parameter sweeps (depth 9–20 km, width 50–120 km, length 200–500 km,
 - **Different scripts run different durations.** `run_Tohoku_okada.py` evolves 4 hours at a 5-minute yieldstep with `tide = -0.45`; `setup_simulation.evolve_domain()` evolves 2 hours at 2 minutes with `tide = 0.0`. Don't compare their outputs without accounting for this.
 - **`evolve_domain()` expects specific gauge keys** — it iterates `[21418, 0, 1, 2]`, so the `gauges` dict passed in must contain all four.
 - **ANUGA's default Manning friction is 0.0, and most scripts here never set it.** That was the single largest error in the model: with nothing dissipating the wave between the shelf break and the shore, *every* source tried — the KL plane, a two-segment KL source, and all five published inversions in `sources/` — over-predicted the surveyed inundation by roughly a factor of two once it was strong enough to match DART 21418. `notebook_tohoku_open_elevation.ipynb` now sets `domain.set_quantity('friction', 0.04)`, which takes Aida K from 0.55 to 1.08 and leaves the DART peak unchanged to 0.01 m (friction is negligible in 5700 m of water). Treat 0.04 as an effective value standing in for unresolved bed roughness and coastal defences on a 450 m DEM, not a measured one — and note the calibration is coupled to the source: at n = 0.04, `slip = 60` gives K = 1.08 while `slip = 35` under-predicts at K = 1.58.
+- **The KL slip field had two platform- and statistics-level bugs, now fixed — don't reintroduce them.** `kl_correlation_matrices` used `np.linalg.eig` on a symmetric covariance matrix; that is the general non-symmetric LAPACK routine, which may return complex-conjugate eigenpairs, and the complex values propagate through `sqrtD` into the slip field and `okada()`. It crashed on macOS (Accelerate) while staying real on Linux (OpenBLAS). Use `np.linalg.eigh`, and clip eigenvalues at 0 before the sqrt. Separately, `sample='sobol'` fed raw Sobol points — uniform on [0,1) — into an expansion that wants standard normals, giving every mode a coefficient with mean 0.5 instead of 0; this inflated the slip field, which is why the KL source needed `slip = 60` to match DART while published inversions peak at 7–16 m of uplift. Both are covered by `tests/test_okada_kl.py`.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
 ## Dependencies
