@@ -13,13 +13,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS is not optional here.  numpy links Accelerate on macOS and
-        # OpenBLAS on Linux, and the LAPACK difference is exactly what made
-        # np.linalg.eig return complex eigenpairs from a symmetric covariance
-        # matrix on one platform and not the other.  A Linux-only matrix would
-        # have passed straight through that bug.
+        # Spread over Python versions, which is what spreads numpy versions:
+        # the complex-eigenpair bug this suite guards reproduces on numpy
+        # 2.5.2 and not on 2.4.6, under both OpenBLAS and Accelerate, so it is
+        # the numpy version that decides -- not the OS.  3.12 is pinned
+        # because that is where the bug was first hit in the wild.  Both
+        # operating systems stay in the matrix so the BLAS difference remains
+        # covered, but they are not what catches this one.
         os: [ubuntu-latest, macos-latest]
-        python-version: ['3.11', '3.13']
+        python-version: ['3.11', '3.12', '3.13']
 
     steps:
       - uses: actions/checkout@v4

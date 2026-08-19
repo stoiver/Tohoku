@@ -143,11 +143,14 @@ def kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, wi
     # C_hat is a symmetric positive-semidefinite covariance matrix, so use the
     # symmetric solver.  LA.eig() calls the general LAPACK routine (dgeev),
     # which does not exploit symmetry and may return complex-conjugate
-    # eigenpairs for near-degenerate eigenvalues -- rounding-dependent, so it
-    # can surface on one platform and not another (it crashed on macOS with
-    # Accelerate while staying real on Linux with OpenBLAS).  Complex D and V
-    # then propagate through sqrtD into the slip field and on into okada().
-    # LA.eigh() cannot return complex, and is more accurate here besides.
+    # eigenpairs; complex D and V then propagate through sqrtD into the slip
+    # field and on into okada(), crashing the run.
+    #
+    # Whether that happens is numpy-version dependent, not platform dependent:
+    # CI with LA.eig() restored fails on numpy 2.5.2 under *both* OpenBLAS
+    # (Linux) and Accelerate (macOS), and passes on numpy 2.4.6 under both.
+    # LA.eigh() cannot return complex on any version, and is more accurate
+    # here besides.
     D,V = LA.eigh(C_hat)
 
     idx = D.argsort()[::-1]

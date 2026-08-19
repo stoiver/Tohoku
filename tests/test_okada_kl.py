@@ -4,10 +4,12 @@ Two of these guard bugs that were live in the repository:
 
 * `kl_correlation_matrices` used `np.linalg.eig`, the general non-symmetric
   LAPACK solver, on a symmetric covariance matrix.  That may return
-  complex-conjugate eigenpairs depending on rounding, which propagates through
-  the slip field into okada() and crashes the run.  It surfaced on macOS
-  (Accelerate) while staying real on Linux (OpenBLAS), so
-  `test_eigendecomposition_is_real` only has teeth if CI runs on both.
+  complex-conjugate eigenpairs, which propagate through the slip field into
+  okada() and crash the run.  The trigger is the numpy version, not the
+  platform: a CI probe with `eig` restored failed on numpy 2.5.2 under both
+  OpenBLAS and Accelerate, and passed on numpy 2.4.6 under both.  So
+  `test_eigendecomposition_is_real` needs a matrix spanning numpy versions to
+  have teeth -- which is what the Python-version spread in CI buys.
 * `sample='sobol'` fed raw Sobol points, uniform on [0, 1), into an expansion
   that wants standard normal deviates -- biasing every mode's coefficient by
   +0.5 and truncating the tails.
