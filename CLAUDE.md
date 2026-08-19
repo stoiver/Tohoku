@@ -126,34 +126,39 @@ These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — s
 | UCSB3, open DEM, n = 0.04 | 1.86 | 0.95 | 1.72 | +0.47 | 3.47 | 64 |
 | UCSB3, `Tohoku.pts`, n = 0.04 | 1.85 | 0.84 | 1.70 | +0.97 | 3.92 | **3** |
 | **UCSB3, `Tohoku.pts`, n = 0.05** | **1.85** | **1.06** | 1.71 | **−0.04** | **3.74** | 5 |
-| KL slip 60, open DEM, n = 0.04 (what the notebook ships) | 1.82 | 1.08 | 1.75 | −0.00 | 4.06 | 68 |
+| KL slip 81, open DEM, n = 0.03 (what the notebook ships) | 1.86 | 0.95 | 1.69 | +0.45 | 4.06 | 68 |
 
-The notebook's own configuration matches this on bias, but misses 68 surveyed points entirely; the best configuration misses 5.
+The notebook's own configuration is comparable on K and κ, but misses 68 surveyed points entirely; the best configuration misses 5. The gap is inundation extent, not height accuracy — which is a property of the DEM, not the source.
+
+The UCSB3 rows predate the KL fixes but are unaffected by them: those runs take their deformation from `sources/UCSB3.pts` and never touch the KL code. The KL row is post-fix.
 
 Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
-- **κ ≈ 1.7 is a floor.** Every configuration tried this session — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments — lands at κ = 1.67–1.75. Nothing in the source, the bathymetry or the friction touches it, so the scatter is set by the ~250 m mesh or by genuine bay-to-bay variability in the survey itself. Getting near the κ < 1.45 guideline target needs a finer mesh, not better inputs.
+- **κ ≈ 1.7 is a floor.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.72, and only ever goes *up* from there (to 2.0 at badly chosen friction). Nothing in the source, the bathymetry or the friction touches it, so the scatter is set by the ~250 m mesh or by genuine bay-to-bay variability in the survey itself. Getting near the κ < 1.45 guideline target needs a finer mesh, not better inputs.
 
 ### Friction
 
-All rows below are the same run — KL single plane, slip 60, open DEM, full mesh — with only Manning *n* changed:
+All rows below are the same run — KL single plane, slip 81, open DEM, full mesh, fixed KL code — with only Manning *n* changed:
 
 | n | DART peak | K | κ | bias | RMS | survey pts left dry |
 |------|------|------|------|--------|------|-----|
-| 0    | 1.82 | 0.55 | 1.88 | +3.59 | 5.97 | 59 |
-| 0.02 | 1.82 | 0.67 | 1.74 | +2.28 | 4.85 | 62 |
-| 0.025| 1.82 | 0.73 | 1.77 | +1.76 | 4.54 | 62 |
-| 0.03 | 1.82 | 0.81 | **1.67** | +1.19 | 4.30 | 65 |
-| **0.04** | 1.82 | **1.08** | 1.75 | **−0.00** | 4.06 | 68 |
-| 0.05 | 1.82 | 1.47 | 2.00 | −1.05 | 4.04 | 73 |
+| 0     | 1.86 | 0.63 | 1.87 | +2.61 | 5.31 | 59 |
+| 0.02  | 1.86 | 0.79 | 2.01 | +1.46 | 4.43 | 62 |
+| 0.025 | 1.86 | 0.85 | 1.72 | +0.97 | 4.20 | 65 |
+| **0.03** | 1.86 | **0.95** | **1.69** | +0.45 | 4.06 | 68 |
+| 0.035 | 1.86 | 1.08 | 1.72 | −0.07 | 3.99 | 68 |
+| 0.04  | 1.86 | 1.24 | 1.79 | −0.56 | 3.98 | 69 |
+| 0.05  | 1.86 | 1.62 | 1.92 | −1.42 | 4.13 | 78 |
 
 Reading it:
 
-- **The DART peak is 1.82 m at every value.** Friction is inert in the far field, so it can be calibrated against the coast without disturbing the deep-ocean fit at all.
-- **n = 0.04 is the bias optimum** (K crosses 1.0 near n ≈ 0.037); 0.05 overshoots into 1.5× under-prediction. Below 0.04 RMS falls monotonically, so nothing argues for a smaller value — but past 0.04 RMS keeps falling only because everything is shrinking toward zero, so it stops measuring quality once the bias goes negative.
-- **κ bottoms out at n = 0.03, not at the bias optimum.** Bias and scatter want different values: friction corrects the average by taking height off everywhere, and the bay-to-bay variability it cannot reproduce gets relatively worse beyond ~0.03.
+- **The DART peak is 1.86 m at every value, including n = 0.** Friction is inert in the far field, so slip and friction can be calibrated independently and in that order.
+- **n = 0.03 is the K optimum** (K = 0.95, inside the guideline band); the arithmetic bias zeroes near 0.035 and RMS bottoms at 0.04. The three criteria disagree across a 0.01 window, which is about the tuning precision this model supports — don't read more than ±0.005 into it.
+- **κ bottoms out at n = 0.03 (1.69), the same place as K.** The κ = 2.01 at n = 0.02 breaks the pattern, sitting above both its neighbours; unexplained, possibly a partial-wetting effect at that damping, and left in rather than smoothed away.
 - **`dry` rises monotonically with n** — height accuracy is bought with inundation extent. That trades directly against the DEM choice, where `Tohoku.pts` takes dry from 64 to 3, so pair the two rather than tuning either alone.
+
+An earlier version of this table was measured at slip 60 before the KL fixes (`eigh`, normal Sobol deviates). The shape was the same but the optimum sat at n = 0.04; those numbers are superseded.
 
 ### Sources
 
