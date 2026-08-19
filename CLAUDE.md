@@ -104,6 +104,19 @@ It renders `stage` over an OpenStreetMap/satellite basemap (`epsg = 32654` match
 
 Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the inundation close-up box, alongside the DART 21418 peak (observed 1.87 m at 33 min). *K* is the geometric mean of observed/modelled, so **K = 1 is unbiased and K < 1 means the model runs high**; *&kappa;* is the geometric standard deviation, i.e. the typical scatter factor. `tsunami_observations.py` loads the survey; the notebook's validation section does the scoring.
 
+### Notebook defaults
+
+`notebook_tohoku_open_elevation.ipynb` ships `slip = 81`, `friction = 0.03`, `elevation_source = 'open'`: DART peak 1.86 m against 1.87 m observed, **K = 0.95**, κ = 1.69, bias +0.45 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and cannot be — see the κ floor below.
+
+**Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
+
+1. set `slip` from the DART 21418 peak, then
+2. set `friction` from Aida K against the survey.
+
+At slip 81: n = 0.03 → K = 0.95, κ = 1.69, bias +0.45 m; n = 0.035 → K = 1.08, bias −0.07 m; n = 0.04 → K = 1.24, bias −0.56 m. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
+
+These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — see *Gotchas*. Before those fixes the notebook used slip 60 with n = 0.04; that pairing is meaningless now, since the old uniform-deviate bug inflated the slip field and the same settings give K = 1.54 with a DART peak of 1.38 m against the corrected code.
+
 ### Best configuration found
 
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
