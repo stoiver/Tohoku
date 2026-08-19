@@ -92,12 +92,70 @@ python ~/anuga_core/scripts/anuga_sww_gui.py --config tohoku_source_example_001.
 
 It renders `stage` over an OpenStreetMap/satellite basemap (`epsg = 32654` matching UTM 54N) and writes numbered PNG frames to `_plot/`. The `*_osm.jpg` / `*_satellite.jpg` files with their `.georef` sidecars are exported basemap tiles; a `.georef` line is `xll yll xres yres width height`.
 
+## Calibration against the TTJS survey
+
+Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the inundation close-up box, alongside the DART 21418 peak (observed 1.87 m at 33 min). *K* is the geometric mean of observed/modelled, so **K = 1 is unbiased and K < 1 means the model runs high**; *&kappa;* is the geometric standard deviation, i.e. the typical scatter factor. `tsunami_observations.py` loads the survey; the notebook's validation section does the scoring.
+
+### Best configuration found
+
+**UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
+
+| run | DART | K | κ | bias | RMS | survey pts left dry |
+|-----|------|------|------|-------|------|----|
+| UCSB3, open DEM, n = 0.04 | 1.86 | 0.95 | 1.72 | +0.47 | 3.47 | 64 |
+| UCSB3, `Tohoku.pts`, n = 0.04 | 1.85 | 0.84 | 1.70 | +0.97 | 3.92 | **3** |
+| **UCSB3, `Tohoku.pts`, n = 0.05** | **1.85** | **1.06** | 1.71 | **−0.04** | **3.74** | 5 |
+| KL slip 60, open DEM, n = 0.04 (what the notebook ships) | 1.82 | 1.08 | 1.75 | −0.00 | 4.06 | 68 |
+
+The notebook's own configuration matches this on bias, but misses 68 surveyed points entirely; the best configuration misses 5.
+
+Two things to carry away:
+
+- **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
+- **κ ≈ 1.7 is a floor.** Every configuration tried this session — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments — lands at κ = 1.67–1.75. Nothing in the source, the bathymetry or the friction touches it, so the scatter is set by the ~250 m mesh or by genuine bay-to-bay variability in the survey itself. Getting near the κ < 1.45 guideline target needs a finer mesh, not better inputs.
+
+### Friction
+
+All rows below are the same run — KL single plane, slip 60, open DEM, full mesh — with only Manning *n* changed:
+
+| n | DART peak | K | κ | bias | RMS | survey pts left dry |
+|------|------|------|------|--------|------|-----|
+| 0    | 1.82 | 0.55 | 1.88 | +3.59 | 5.97 | 59 |
+| 0.02 | 1.82 | 0.67 | 1.74 | +2.28 | 4.85 | 62 |
+| 0.025| 1.82 | 0.73 | 1.77 | +1.76 | 4.54 | 62 |
+| 0.03 | 1.82 | 0.81 | **1.67** | +1.19 | 4.30 | 65 |
+| **0.04** | 1.82 | **1.08** | 1.75 | **−0.00** | 4.06 | 68 |
+| 0.05 | 1.82 | 1.47 | 2.00 | −1.05 | 4.04 | 73 |
+
+Reading it:
+
+- **The DART peak is 1.82 m at every value.** Friction is inert in the far field, so it can be calibrated against the coast without disturbing the deep-ocean fit at all.
+- **n = 0.04 is the bias optimum** (K crosses 1.0 near n ≈ 0.037); 0.05 overshoots into 1.5× under-prediction. Below 0.04 RMS falls monotonically, so nothing argues for a smaller value — but past 0.04 RMS keeps falling only because everything is shrinking toward zero, so it stops measuring quality once the bias goes negative.
+- **κ bottoms out at n = 0.03, not at the bias optimum.** Bias and scatter want different values: friction corrects the average by taking height off everywhere, and the bay-to-bay variability it cannot reproduce gets relatively worse beyond ~0.03.
+- **`dry` rises monotonically with n** — height accuracy is bought with inundation extent. That trades directly against the DEM choice, where `Tohoku.pts` takes dry from 64 to 3, so pair the two rather than tuning either alone.
+
+### Sources
+
+Scored on a coarse mesh (all `res_*` × 8) unless noted, with the deformation added to both `stage` and `elevation`. Note `run_Tohoku.py` adds to `stage` only, so its results will not line up with these:
+
+| source | uZ max | DART | K | note |
+|--------|--------|------|------|------|
+| Caltech | 6.9 m | 0.87 | 0.97 | best coastal fit of the .pts sources, DART half-size |
+| Fujii | 12.5 m | 0.90 | 0.88 | |
+| Ammon | 9.5 m | 0.83 | 0.51 | |
+| Hayes | 8.6 m | 0.88 | 2.00 | under-predicts the coast 2× |
+| UCSB3 | 16.0 m | **1.51** | 0.77 | best joint fit; at full mesh with n = 0.04: DART 1.86, K 0.95 |
+| okada.pts | 30.5 m | 4.13 | 0.20 | unusable, as `project.py` already notes |
+
+Fault-parameter sweeps (depth 9–20 km, width 50–120 km, length 200–500 km, and a two-segment source with a shallow near-trench strip) did **not** decouple the far field from the coast: every configuration strong enough to match DART over-predicted the survey ~2×, and enlarging the fault raised coastal height faster than the DART peak. The single-plane 200 × 50 km at 20 km depth remains the best joint geometry. Friction, not source geometry, is what resolves the tension — which is why the friction table above matters more than any of the source variants.
+
 ## Gotchas
 
 - **`iseed` in `run_Tohoku_okada.py` does not select the slip realisation.** Despite its comment, the top-level `iseed` only feeds the run name (`Okada_<iseed>` → `_output_Okada_<iseed>`); the actual KL draw is fixed by the hard-coded `iseed=1001` in the `okl.kl_deformation(...)` call. `setup_simulation.apply_deformation()` similarly hard-codes `iseed=1234`. Change both if you want a genuinely different realisation.
 - **Mesh caching differs between entry points.** `run_Tohoku_okada.py` calls `create_domain_from_regions(..., use_cache=True)` while `setup_simulation.create_domain()` uses `use_cache=False`; both write to the same `project.meshname`. After changing `rfact` or the polygons, delete `Tohoku_<scenario>_.msh` to be sure the mesh is rebuilt.
 - **Different scripts run different durations.** `run_Tohoku_okada.py` evolves 4 hours at a 5-minute yieldstep with `tide = -0.45`; `setup_simulation.evolve_domain()` evolves 2 hours at 2 minutes with `tide = 0.0`. Don't compare their outputs without accounting for this.
 - **`evolve_domain()` expects specific gauge keys** — it iterates `[21418, 0, 1, 2]`, so the `gauges` dict passed in must contain all four.
+- **ANUGA's default Manning friction is 0.0, and most scripts here never set it.** That was the single largest error in the model: with nothing dissipating the wave between the shelf break and the shore, *every* source tried — the KL plane, a two-segment KL source, and all five published inversions in `sources/` — over-predicted the surveyed inundation by roughly a factor of two once it was strong enough to match DART 21418. `notebook_tohoku_open_elevation.ipynb` now sets `domain.set_quantity('friction', 0.04)`, which takes Aida K from 0.55 to 1.08 and leaves the DART peak unchanged to 0.01 m (friction is negligible in 5700 m of water). Treat 0.04 as an effective value standing in for unresolved bed roughness and coastal defences on a 450 m DEM, not a measured one — and note the calibration is coupled to the source: at n = 0.04, `slip = 60` gives K = 1.08 while `slip = 35` under-predicts at K = 1.58.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
 ## Dependencies
@@ -138,3 +196,14 @@ domain.set_quantity('elevation', filename='Tohoku_dem.tif', location='centroids'
 ```
 
 Source: NOAA NCEI Global DEM Mosaic (GEBCO-based), EPSG:4326, 15 arc-second native resolution, land + ocean. An OpenTopography alternative (free API key required) is also provided in the same file.
+
+#### Choosing between the two DEMs
+
+`notebook_tohoku_open_elevation.ipynb` takes either, via `elevation_source` in the elevation cell:
+
+- `'open'` — the downloaded GeoTIFF alone (15 arcsec, ~450 m). The reproducible path, and the default.
+- `'pts'` — `Tohoku.pts` (1.34 M points, ~150 m) interpolated onto the mesh with `LinearNDInterpolator` and overlaid where it has coverage, with the GeoTIFF filling the rest. `Tohoku.pts` spans x 422–899 km, y 3954–4518 km while the domain runs east to x 1300 km, so it *cannot* supply the deep ocean on its own — fitting it across the whole domain extrapolates to nonsense (this is also why `add_quantity('stage', filename='sources/<scenario>.pts')` in `run_Tohoku.py` needs care: those source fields cover an even smaller box). The run writes `tohoku_pts_dem.sww` rather than `tohoku_open_dem.sww`.
+
+The two agree on the mean surface to +0.03 m over the 330 918 shared cells, but differ by 4.9 m RMS on the shelf, 7.3 m in the −20…0 m band and 12.2 m on coastal land — i.e. wherever the elevation actually decides the inundation. The measured effect, holding source and friction fixed, is almost entirely on *extent* rather than height: heights barely move (K 0.95 → 0.84, κ 1.72 → **1.70**) but the number of surveyed points the model leaves dry falls from **64 to 3**. The 450 m DEM cannot resolve the low coastal strip the water crossed.
+
+Two things worth knowing before tuning further: κ is essentially unchanged by tripling the bathymetric resolution, so the point-to-point scatter is set by the ~250 m mesh (or by real local variability in the survey), not by the DEM; and friction and DEM are coupled — n = 0.04 was calibrated on the open DEM, so the finer bathymetry lets more water through and wants a slightly larger n to recover K ≈ 1.
