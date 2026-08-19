@@ -96,6 +96,24 @@ It renders `stage` over an OpenStreetMap/satellite basemap (`epsg = 32654` match
 
 Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the inundation close-up box, alongside the DART 21418 peak (observed 1.87 m at 33 min). *K* is the geometric mean of observed/modelled, so **K = 1 is unbiased and K < 1 means the model runs high**; *&kappa;* is the geometric standard deviation, i.e. the typical scatter factor. `tsunami_observations.py` loads the survey; the notebook's validation section does the scoring.
 
+### Best configuration found
+
+**UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
+
+| run | DART | K | κ | bias | RMS | survey pts left dry |
+|-----|------|------|------|-------|------|----|
+| UCSB3, open DEM, n = 0.04 | 1.86 | 0.95 | 1.72 | +0.47 | 3.47 | 64 |
+| UCSB3, `Tohoku.pts`, n = 0.04 | 1.85 | 0.84 | 1.70 | +0.97 | 3.92 | **3** |
+| **UCSB3, `Tohoku.pts`, n = 0.05** | **1.85** | **1.06** | 1.71 | **−0.04** | **3.74** | 5 |
+| KL slip 60, open DEM, n = 0.04 (what the notebook ships) | 1.82 | 1.08 | 1.75 | −0.00 | 4.06 | 68 |
+
+The notebook's own configuration matches this on bias, but misses 68 surveyed points entirely; the best configuration misses 5.
+
+Two things to carry away:
+
+- **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
+- **κ ≈ 1.7 is a floor.** Every configuration tried this session — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments — lands at κ = 1.67–1.75. Nothing in the source, the bathymetry or the friction touches it, so the scatter is set by the ~250 m mesh or by genuine bay-to-bay variability in the survey itself. Getting near the κ < 1.45 guideline target needs a finer mesh, not better inputs.
+
 ### Friction
 
 All rows below are the same run — KL single plane, slip 60, open DEM, full mesh — with only Manning *n* changed:
