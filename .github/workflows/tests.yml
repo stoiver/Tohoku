@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS is not optional here.  numpy links Accelerate on macOS and
+        # OpenBLAS on Linux, and the LAPACK difference is exactly what made
+        # np.linalg.eig return complex eigenpairs from a symmetric covariance
+        # matrix on one platform and not the other.  A Linux-only matrix would
+        # have passed straight through that bug.
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.11', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        # The Okada and KL modules need only these -- no ANUGA -- so the whole
+        # suite runs in a few seconds on a bare environment.
+        run: python -m pip install --upgrade pip numpy scipy matplotlib pytest
+
+      - name: Show the BLAS/LAPACK numpy is using
+        # Printed on every run: when a platform-specific numerical failure
+        # appears, this is the first thing worth knowing.
+        run: python -c "import numpy; numpy.show_config()"
+
+      - name: Run tests
+        env:
+          MPLBACKEND: Agg
+        run: python -m pytest tests -v
