@@ -106,7 +106,7 @@ Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the 
 
 ### Notebook defaults
 
-`notebook_tohoku_open_elevation.ipynb` ships `slip = 81`, `friction = 0.03`, `elevation_source = 'open'`: DART peak 1.86 m against 1.87 m observed, **K = 0.95**, κ = 1.69, bias +0.45 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and cannot be — see the κ floor below.
+`notebook_tohoku_open_elevation.ipynb` ships `slip = 81`, `friction = 0.03`, `elevation_source = 'open'`: DART peak 1.86 m against 1.87 m observed, **K = 0.95**, κ = 1.69, bias +0.45 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and no lever tested so far moves it — see the κ floor below.
 
 **Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
 
@@ -135,7 +135,27 @@ The UCSB3 rows predate the KL fixes but are unaffected by them: those runs take 
 Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
-- **κ ≈ 1.7 is a floor.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.72, and only ever goes *up* from there (to 2.0 at badly chosen friction). Nothing in the source, the bathymetry or the friction touches it, so the scatter is set by the ~250 m mesh or by genuine bay-to-bay variability in the survey itself. Getting near the κ < 1.45 guideline target needs a finer mesh, not better inputs.
+- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
+
+### Mesh resolution
+
+Refining the mesh does **not** reduce κ.  Same source, DEM and friction; only `res_level3` (the inundation region) refined, from ~250 m cells to ~62 m:
+
+| mesh | cells | DART | K | κ | bias | RMS | dry |
+|------|-------|------|------|------|-------|------|-----|
+| ~250 m | 354 946 | 1.85 | 1.06 | 1.71 | −0.04 | 3.74 | 5 |
+| ~62 m | 4 735 001 | 1.82 | 1.02 | **1.73** | +0.37 | 4.15 | 2 |
+
+**13× the cells and κ does not move** (1.71 → 1.73, marginally worse).  That disproves the earlier assumption — recorded here as fact for some time — that the ~250 m discretisation was what set the scatter.  It is not.
+
+What remains: at 62 m cells the model is reading a 150 m DEM, so **the bathymetry is now the binding constraint** rather than the mesh; or the residual is genuine bay-to-bay variability in the survey that no model at this scale reproduces.  The first is testable with a finer DEM over a small area; the second is not fixable at all.
+
+The secondary effects are small and in the expected directions: K improves 1.06 → 1.02 and the dry count falls 5 → 2 as finer cells resolve more low ground, while bias and RMS drift positive because n = 0.05 was calibrated on the 250 m mesh — the friction coupling again.
+
+Practical notes for repeating it: the run was 4.7 M triangles, 91 minutes on the GPU, 1.9 GB of `.sww`.  To keep the file that size the run stored only `stage` and `elevation` (no momenta) and used a 2-minute yieldstep for the first 90 simulated minutes then 10 minutes thereafter — K and κ are read from the `max_*_c` fields, which the operator writes every timestep regardless of yieldstep.  Two traps in that:
+
+- `set_quantities_to_be_stored()` must be called **before** `set_collect_max_quantities()`.  The operator *augments* the store list at construction, so the other order silently drops every `max_*` field and leaves a file that cannot be scored.
+- `anuga.SWW_plotter` requires `xmomentum_c` and will raise `KeyError` on such a file.  Read those runs with `netCDF4` directly, or keep the momenta.
 
 ### Friction
 
@@ -233,4 +253,4 @@ Source: NOAA NCEI Global DEM Mosaic (GEBCO-based), EPSG:4326, 15 arc-second nati
 
 The two agree on the mean surface to +0.03 m over the 330 918 shared cells, but differ by 4.9 m RMS on the shelf, 7.3 m in the −20…0 m band and 12.2 m on coastal land — i.e. wherever the elevation actually decides the inundation. The measured effect, holding source and friction fixed, is almost entirely on *extent* rather than height: heights barely move (K 0.95 → 0.84, κ 1.72 → **1.70**) but the number of surveyed points the model leaves dry falls from **64 to 3**. The 450 m DEM cannot resolve the low coastal strip the water crossed.
 
-Two things worth knowing before tuning further: κ is essentially unchanged by tripling the bathymetric resolution, so the point-to-point scatter is set by the ~250 m mesh (or by real local variability in the survey), not by the DEM; and friction and DEM are coupled — n = 0.04 was calibrated on the open DEM, so the finer bathymetry lets more water through and wants a slightly larger n to recover K ≈ 1.
+Two things worth knowing before tuning further: κ is essentially unchanged by tripling the bathymetric resolution, and equally unchanged by refining the mesh (see *Mesh resolution*), so neither is what sets the point-to-point scatter; and friction and DEM are coupled — n = 0.04 was calibrated on the open DEM, so the finer bathymetry lets more water through and wants a slightly larger n to recover K ≈ 1.
