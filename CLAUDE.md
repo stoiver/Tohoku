@@ -106,14 +106,14 @@ Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the 
 
 ### Notebook defaults
 
-`notebook_tohoku_open_elevation.ipynb` ships `slip = 81`, `friction = 0.03`, `elevation_source = 'open'`: DART peak 1.86 m against 1.87 m observed, **K = 0.95**, κ = 1.69, bias +0.45 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and no lever tested so far moves it — see the κ floor below.
+`notebook_tohoku_open_elevation.ipynb` ships `flow_algorithm = 'DE_ader2'`, `slip = 84`, `friction = 0.033`, `elevation_source = 'open'`: DART peak 1.88 m against 1.87 m observed, **K = 1.00**, κ = 1.70, bias +0.20 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and no lever tested so far moves it — see the κ floor below.
 
 **Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
 
 1. set `slip` from the DART 21418 peak, then
 2. set `friction` from Aida K against the survey.
 
-At slip 81: n = 0.03 → K = 0.95, κ = 1.69, bias +0.45 m; n = 0.035 → K = 1.08, bias −0.07 m; n = 0.04 → K = 1.24, bias −0.56 m. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
+Under DE_ader2 at slip 84: n = 0.03 → K = 0.93; n = 0.033 → K = 1.00, κ = 1.70, bias +0.20 m; n = 0.035 → K = 1.06. (Under DE0 at slip 81 the same sweep gave n = 0.03 → K = 0.95, n = 0.035 → K = 1.08, n = 0.04 → K = 1.24.) **The calibrated pair is solver-specific** — changing the flow algorithm shifts slip by a few per cent and friction by ~10%, so recalibrate if you change it. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
 
 These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — see *Gotchas*. Before those fixes the notebook used slip 60 with n = 0.04; that pairing is meaningless now, since the old uniform-deviate bug inflated the slip field and the same settings give K = 1.54 with a DART peak of 1.38 m against the corrected code.
 
@@ -136,6 +136,24 @@ Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
 - **κ ≈ 1.7 is a floor, and it is *not* the mesh.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
+
+### Flow algorithm
+
+`DE0` is the ANUGA default and what this repo used until now.  Measured at fixed source, DEM, friction and mesh (UCSB3 + `Tohoku.pts` + n = 0.05, ~250 m):
+
+| algorithm | timestepping | runtime | DART | K | κ | RMS |
+|-----------|--------------|---------|------|------|------|------|
+| `DE0` | euler | 88 s | 1.85 | 1.06 | 1.71 | 3.74 |
+| `DE1` | rk2 | 129 s | 2.02 | 0.93 | 1.73 | 5.09 |
+| **`DE_ader2`** | ader2 | **88 s** | 1.81 | 1.07 | **1.66** | **3.63** |
+
+`DE_ader2` is a free improvement over the default: better κ and RMS at *identical* runtime, because its higher-order reconstruction permits a larger stable timestep that pays for the extra work per step.  The notebook now uses it.
+
+**`DE1` is the odd one out and worth treating with suspicion** — second-order time integration made the fit markedly *worse* (DART 2.02 m against 1.87 observed, RMS 5.09) at 1.5× the cost.  That may be an interaction with the limiter betas `_set_DE1_defaults()` installs, which differ from DE0's; it has not been chased down.
+
+All three run under `set_compute_mode('unified')` with no fallback to legacy.  `set_flow_algorithm()` must be called *before* `set_compute_mode()` and before any quantities are set, since it resets the limiter betas and the timestepping method.
+
+Note the κ column: 1.66–1.73 across all three.  The solver is not what sets the scatter either — see *Mesh resolution*.
 
 ### Mesh resolution
 
