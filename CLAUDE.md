@@ -135,7 +135,7 @@ The UCSB3 rows predate the KL fixes but are unaffected by them: those runs take 
 Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
-- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
+- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not — nor is it the solver (*Flow algorithm*), nor missing sea defences (*Coastal defences*), each tested and eliminated. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
 
 ### Flow algorithm
 
@@ -154,6 +154,27 @@ Two things to carry away:
 All three run under `set_compute_mode('unified')` with no fallback to legacy.  `set_flow_algorithm()` must be called *before* `set_compute_mode()` and before any quantities are set, since it resets the limiter betas and the timestepping method.
 
 Note the κ column: 1.66–1.73 across all three.  The solver is not what sets the scatter either — see *Mesh resolution*.
+
+### Coastal defences (riverwalls)
+
+`Tohoku.pts` cannot resolve the sea defences, and adding them as riverwalls does not help.
+
+**The DEM has no defences in it.** At 147 x 159 m spacing against a Sendai seawall ~30-40 m wide at the base, there is roughly *0.27 of a sample* across the structure, so a wall does not get smoothed — it falls between sample points and vanishes. Measured directly, the maximum elevation within 300 m inland of the 0 m line is 2.30 m at Arahama, 2.24 m at Yuriage and 2.11 m at Sendai airport, against a real crest of ~6.2 m T.P. This is what `friction` is standing in for, and it is why refining the mesh changed nothing (see *Mesh resolution*): the missing feature is in the data, not the discretisation, and a 62 m mesh still cannot see a 30 m wall.
+
+**ANUGA's riverwalls are the right tool and they work here.** A riverwall is a sub-grid barrier carried on mesh edges with a weir flux, so it represents a 30 m wall on a 250 m mesh. They are implemented in the GPU kernels (`gpu_domain_core.c`, `core_kernels.c`), they run under `set_compute_mode('unified')` with `DE_ader2`, and they require a DE algorithm. The wall alignment must coincide *exactly* with mesh edges: pass it to `breaklines` in `create_domain_from_regions`, then call `domain.riverwallData.create_riverwalls()`, which handles the georeference itself (pass absolute UTM).
+
+**But the intact-wall idealisation is wrong.** A 6.2 m crest along 33.6 km of the Sendai coast (alignment derived from the DEM's 0 m contour, offset 150 m landward, 230 edges instantiated), paired against an identical run on the identical breakline mesh:
+
+| Sendai box, 953 points | K | κ | bias | RMS | onshore wet cells |
+|------------------------|------|------|-------|------|-----|
+| no wall | 1.17 | 1.61 | −0.78 | 1.97 | 4545 |
+| 6.2 m riverwall | 1.94 | 1.97 | −2.02 | 3.04 | 3519 |
+
+Every measure gets worse: 23% less onshore wetting, K to 1.94, κ *up* from 1.61 to 1.97. The real Sendai levees were overtopped within minutes and largely destroyed, so the survey heights record what happened *after* they failed; a wall that stands for four hours blocks water that actually went inland. This is also evidence against the natural hypothesis that missing defences cause the κ scatter — adding them makes the scatter worse.
+
+A fair test needs **failure**: crest held at 6.2 m until overtopping, then dropped. ANUGA riverwalls are static, but an operator could lower `riverwall_elevation` on a time or overtopping criterion. That needs per-segment failure information which does not appear to exist at the required resolution.
+
+One trap worth recording: the first attempt at this pairing inherited `n = 0.033` (calibrated on the *open* DEM) onto the `pts` DEM, leaving it badly under-frictioned at κ = 2.81 rather than ~1.6. At that operating point the wall's effect was partly buried — κ appeared flat (Δ = −0.002) and the K shift was milder. **Pair experiments at a calibrated operating point**, or the comparison measures the mis-calibration instead.
 
 ### Mesh resolution
 
