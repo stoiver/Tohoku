@@ -107,7 +107,7 @@ Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the 
 
 ### Notebook defaults
 
-`notebook_tohoku_open_elevation.ipynb` still ships `flow_algorithm = 'DE_ader2'`, `slip = 84`, `friction = 0.033`, `elevation_source = 'open'`. **Those values are stale**: they were calibrated when the KL field's `alpha` was 0.75, which inflated the realised slip (see *Gotchas*). At the corrected `alpha = 0.4` the same nominal `slip = 84` raises the realised mean from 50.1 m to 65.9 m, a 1.32x stronger source.
+`notebook_tohoku_open_elevation.ipynb` ships `flow_algorithm = 'DE_ader2'`, `slip = 71`, `friction = 0.038`, `elevation_source = 'open'`. It previously shipped `slip = 84` / `friction = 0.033`, which were calibrated when the KL field's `alpha` was 0.75, which inflated the realised slip (see *Gotchas*). At the corrected `alpha = 0.4` the same nominal `slip = 84` raises the realised mean from 50.1 m to 65.9 m, a 1.32x stronger source.
 
 **The recalibrated pair is `slip = 71`, `friction = 0.038`** — DART 1.87 m against 1.87 m observed, K = 1.01, κ = 1.76, bias +0.39 m, 67 of ~1700 survey points left dry. Measured on the full mesh under DE_ader2 with the open DEM:
 
@@ -412,8 +412,12 @@ Four things to carry away:
   the field is nearly uncorrelated along strike. Longer `r0` smooths it but
   *increases* the spread at fixed `alpha`, so tune the two together.
   Recalibrated: the KL path now wants `slip = 71` with `friction = 0.038`
-  (was 84 / 0.033) — see *Notebook defaults*. The notebooks have **not** been
-  updated and still ship the stale pair.
+  (was 84 / 0.033) — see *Notebook defaults*. `notebook_tohoku_open_elevation.ipynb`
+  carries the new pair. The other KL notebooks were **not** touched, because
+  the calibration is specific to the 200 x 50 km plane on the open DEM under
+  DE_ader2 and does not transfer to their geometry — but their sources are
+  still 1.32x stronger than before the fix, so any tuning done in them is
+  stale.
 - **The KL slip field had two bugs, now fixed — don't reintroduce them.** `kl_correlation_matrices` used `np.linalg.eig` on a symmetric covariance matrix; that is the general non-symmetric LAPACK routine, which may return complex-conjugate eigenpairs, and the complex values propagate through `sqrtD` into the slip field and `okada()`. **It depends on the numpy version, not the platform**: with `eig` restored, CI fails on numpy 2.5.2 under both OpenBLAS and Accelerate, and passes on numpy 2.4.6 under both (run 32253704090). It was first hit on macOS with Python 3.12, which made it look platform-specific; it is not. Use `np.linalg.eigh`, and clip eigenvalues at 0 before the sqrt. Separately, `sample='sobol'` fed raw Sobol points — uniform on [0,1) — into an expansion that wants standard normals, giving every mode a coefficient with mean 0.5 instead of 0; this inflated the slip field, which is why the KL source needed `slip = 60` to match DART while published inversions peak at 7–16 m of uplift. Both are covered by `tests/test_okada_kl.py`.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
