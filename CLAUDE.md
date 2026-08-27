@@ -463,11 +463,36 @@ source: no distribution tested closes it. Candidates, none tested:
   coastal heights ~20% (K 0.97 -> 0.81), taking the DART/coast ratio from
   0.834 to 0.769 — the gap widens — at 1.66x the runtime (106 s against 64 s).
   &kappa; moved 1.68 -> 1.69. Tested and eliminated;
-- the source is mislocated in a way that costs far-field amplitude. Note the
-  `x0` shift of 40 km west, which was tuned for *arrival time* on the old
-  200 x 50 km plane and has never been revisited against amplitude.
+- ~~the source is mislocated in a way that costs far-field amplitude~~
+  **Tested and eliminated.** Moving the split f = 0.5 source +/- 40 km along
+  the `x0` shift axis:
 
-That last one is the cheapest to check and should be first.
+  | position | DART | arrival | K | &kappa; | RMS |
+  |---|------|--------|------|------|------|
+  | 40 km **east** (shift undone) | **0.76** | 28 min | 1.04 | 1.67 | 2.71 |
+  | baseline | 0.86 | 30 min | 0.97 | 1.68 | 2.74 |
+  | 40 km **west** | 0.85 | **34 min** | 0.79 | 1.78 | 2.81 |
+
+  The whole 80 km sweep spans 0.76-0.86 m of DART peak — a 12% range against
+  the factor of two needed. Note also that moving the source *closer* to the
+  buoy made the peak **smaller**, so far-field amplitude here is governed by
+  directivity, not by geometric spreading along the path; do not reason about
+  it as 1/sqrt(distance).
+
+**So both the solver and the source position are eliminated, and the remaining
+candidate is the model itself** — coastal over-amplification and/or far-field
+dissipation on 450 m bathymetry. That is the thing to test next, and it is not
+cheap: it needs a finer DEM over the shelf, or the `pts` DEM paired with a
+recalibrated friction, to see whether the coast/far-field ratio moves at all.
+
+One separate finding from the same sweep: **the `x0` shift is a compromise, not
+a tuned optimum.** Arrival time wants the source *west* (34 min against 33
+observed, versus 30 at baseline) while the coastal fit wants it *east*
+(K 0.97 -> 0.79 and &kappa; 1.68 -> 1.78 as it moves west). The 40 km shift was
+derived for arrival time on the old 200 x 50 km plane and does not transfer to
+this geometry; the split source arrives 3 min early at the inherited position.
+Re-derive it per source rather than inheriting it, and record which of the two
+constraints it was set from.
 
 
 ## Gotchas
