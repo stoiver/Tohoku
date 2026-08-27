@@ -19,3 +19,6 @@ screenshots/
 *.tif
 *.georef
 tohoku_open_dem*.jpg
+
+# cached Tohoku.pts interpolation onto a mesh (see calibrate_deterministic.py)
+_pts_elev_*.npy

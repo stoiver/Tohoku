@@ -19,6 +19,7 @@ md = 0.01
 
 p = argparse.ArgumentParser()
 p.add_argument('--flow-algorithm', default='DE_ader2')
+p.add_argument('--elevation-source', choices=['open', 'pts'], default='open')
 p.add_argument('--source', choices=['det', 'kl', 'split'], default='det')
 p.add_argument('--split-frac', type=float, default=0.6)   # moment fraction, shallow segment
 p.add_argument('--dip1', type=float, default=8.0)
@@ -65,6 +66,32 @@ yll = domain.geo_reference.yllcorner
 print(f'Triangles: {len(domain)}')
 
 domain.set_quantity('elevation', filename='Tohoku_dem.tif', location='centroids')
+
+if a.elevation_source == 'pts':
+    # Tohoku.pts (1.34 M points, ~150 m) overlaid where it has coverage, with
+    # the GeoTIFF filling the rest -- it cannot supply the deep ocean east of
+    # x ~ 899 km on its own.  The LinearNDInterpolator build is a Delaunay
+    # triangulation of 1.34 M points, so cache the result on the mesh: a
+    # friction sweep reuses the same mesh every run.
+    cache = f'_pts_elev_{len(domain)}.npy'
+    Elev0 = domain.quantities['elevation'].centroid_values
+    if os.path.exists(cache):
+        elev_pts = np.load(cache)
+        print(f'pts elevation: loaded {cache}')
+    else:
+        from scipy.interpolate import LinearNDInterpolator
+        from anuga.geospatial_data.geospatial_data import Geospatial_data
+        t_i = time.time()
+        pts_dem = Geospatial_data('Tohoku.pts')
+        interp = LinearNDInterpolator(pts_dem.get_data_points(absolute=True),
+                                      np.asarray(pts_dem.get_attributes()))
+        elev_pts = interp(domain.centroid_coordinates[:, 0] + xll,
+                          domain.centroid_coordinates[:, 1] + yll)
+        np.save(cache, elev_pts)
+        print(f'pts elevation: built in {time.time()-t_i:.0f} s -> {cache}')
+    covered = np.isfinite(elev_pts)
+    Elev0[:] = np.where(covered, elev_pts, Elev0)
+    print(f'Tohoku.pts covers {covered.sum()} of {covered.size} cells')
 tide = 0.0
 domain.set_quantity('stage', tide)
 Elevation = domain.quantities['elevation'].centroid_values
@@ -154,7 +181,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, algorithm=a.flow_algorithm, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, algorithm=a.flow_algorithm, dem=a.elevation_source, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),

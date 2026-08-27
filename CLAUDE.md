@@ -479,11 +479,50 @@ source: no distribution tested closes it. Candidates, none tested:
   directivity, not by geometric spreading along the path; do not reason about
   it as 1/sqrt(distance).
 
-**So both the solver and the source position are eliminated, and the remaining
-candidate is the model itself** — coastal over-amplification and/or far-field
-dissipation on 450 m bathymetry. That is the thing to test next, and it is not
-cheap: it needs a finer DEM over the shelf, or the `pts` DEM paired with a
-recalibrated friction, to see whether the coast/far-field ratio moves at all.
+**The DEM is eliminated too, and with the opposite sign to the hypothesis.**
+Running the DART-matched KL source (slip 71) on `Tohoku.pts` with friction
+re-swept:
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.038 | 1.87 | 0.87 | **1.67** | +0.89 | 4.81 | **11** |
+| **0.045** | 1.87 | **1.05** | **1.67** | **+0.07** | 4.69 | 45 |
+| 0.050 | 1.87 | 1.20 | 1.71 | &minus;0.47 | 4.69 | 51 |
+| 0.055 | 1.87 | 1.37 | 1.76 | &minus;0.97 | 4.72 | 62 |
+
+At fixed friction the 150 m DEM *lowers* K (1.01 -> 0.87 at n = 0.038): the
+finer bathymetry lets **more** water through, so it makes the coastal
+over-prediction worse and wants *more* roughness, not less. The coarse DEM was
+under-amplifying the coast, not over-amplifying it, so this cannot be the
+source of the coast/far-field mismatch.
+
+Note also that **the DART peak is completely unmoved** — 1.87 m at 32 min in
+every row. `Tohoku.pts` covers 330 918 of 354 946 cells including the whole
+source region, so the far-field path is evidently governed by the deep ocean
+east of its coverage, which the GeoTIFF supplies either way.
+
+**So the solver, the source position and the DEM are all eliminated**, and the
+coast/far-field mismatch remains unexplained. What is left, untested: the
+shallow-water physics at the shelf break (no dispersion, no breaking), the
+effective friction standing in for unresolved roughness, or the DART record /
+`x0` reference itself. The recalibration below is worth having regardless.
+
+#### `pts` DEM calibration
+
+**The recalibrated pair on `Tohoku.pts` is `slip = 71`, `friction = 0.045`** —
+DART 1.87 m, K 1.05, &kappa; **1.67**, bias +0.07 m, 45 dry. Against the open
+DEM at n = 0.038 (K 1.01, &kappa; 1.76, 67 dry) it takes &kappa; to the floor
+and wets a third of the missing points, at identical DART. It does not beat the
+repo best (UCSB3 + `pts` + n = 0.05: K 1.06, &kappa; 1.71, RMS 3.74, **5** dry)
+on RMS or extent, but it has the better &kappa;.
+
+The n = 0.038 row is the interesting one for inundation *extent*: **11 dry
+points**, near the repo best, but at K 0.87. Extent and height accuracy trade
+sharply across 0.007 of friction on the fine DEM — pick the end you need.
+
+Use `--elevation-source pts`; the driver caches the 1.34 M-point
+LinearNDInterpolator result to `_pts_elev_<ncells>.npy` (15 s to build, then
+reused), which is gitignored.
 
 One separate finding from the same sweep: **the `x0` shift is a compromise, not
 a tuned optimum.** Arrival time wants the source *west* (34 min against 33
