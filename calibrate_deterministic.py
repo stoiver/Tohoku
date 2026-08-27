@@ -18,7 +18,15 @@ closeup_extent = [475_000, 580_000, 4_150_000, 4_280_000]
 md = 0.01
 
 p = argparse.ArgumentParser()
-p.add_argument('--source', choices=['det', 'kl'], default='det')
+p.add_argument('--source', choices=['det', 'kl', 'split'], default='det')
+p.add_argument('--split-frac', type=float, default=0.6)   # moment fraction, shallow segment
+p.add_argument('--dip1', type=float, default=8.0)
+p.add_argument('--width1', type=float, default=75000.0)
+p.add_argument('--top1', type=float, default=5000.0)
+p.add_argument('--dip2', type=float, default=18.0)
+p.add_argument('--width2', type=float, default=90000.0)
+p.add_argument('--xt', type=float, default=750290.0)   # trench edge, UTM 54N
+p.add_argument('--yt', type=float, default=4181170.0)
 p.add_argument('--slip', type=float, default=84.0)   # kl only: nominal mean slip
 p.add_argument('--iseed', type=int, default=1234)    # kl only
 p.add_argument('--M0', type=float, default=4.2e22)
@@ -71,6 +79,15 @@ if a.source == 'det':
         x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
         M0=a.M0, u0=0.5, sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
         depth=a.depth, length=a.length, width=a.width)
+elif a.source == 'split':
+    f = a.split_frac
+    segs = [dict(dip=a.dip1, width=a.width1, top_depth=a.top1, M0=f*a.M0,
+                 sig_u=a.sig_u, v0=0.45, sig_v=0.35),
+            dict(dip=a.dip2, width=a.width2, M0=(1.0 - f)*a.M0,
+                 sig_u=0.20, v0=0.45, sig_v=0.35)]
+    uE, uN, uZ, slips_list = okl.split_fault_deformation(
+        x, y, a.xt - xll, a.yt - yll, segs, length=a.length)
+    slips = np.concatenate([s_.ravel() for s_ in slips_list])
 else:
     uE, uN, uZ, slips = okl.kl_deformation(
         x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
@@ -81,7 +98,10 @@ else:
 
 Elevation[:] += uZ
 Stage[:]     += uZ
-Mw = (np.log10(40e9*a.length*a.width*slips.mean()) - 9.1)/1.5
+if a.source == 'split':
+    Mw = (np.log10(a.M0) - 9.1)/1.5
+else:
+    Mw = (np.log10(40e9*a.length*a.width*slips.mean()) - 9.1)/1.5
 print(f'source: Mw {Mw:.2f}  mean slip {slips.mean():.1f} m  peak {slips.max():.1f} m  '
       f'uZ {uZ.min():.2f}..{uZ.max():.2f} m')
 
@@ -133,7 +153,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, source=a.source, slip=a.slip, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),

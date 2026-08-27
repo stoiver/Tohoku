@@ -386,6 +386,86 @@ Four things to carry away:
   in the same place.
 
 
+### Split fault
+
+`split_fault_deformation()` hangs several segments off a common trench anchor,
+each abutting the previous in both horizontal distance and depth, with its own
+dip, width, moment and taper. `segment_placement()` does the geometry; it is
+covered by `test_split_fault_reduces_to_single_plane`, which pins a
+one-segment split against `deterministic_deformation()` — worth having, since a
+wrong placement shifts the source tens of km while still producing an entirely
+plausible-looking deformation field.
+
+The motivation is a real limitation of the single plane. Matching the ~1.2 m of
+surveyed coastal subsidence forces slip **down dip**, which is exactly where it
+over-loads the coast; trench-peaked slip fixes the coast and gives near-zero
+subsidence. A listric source can do both, and does: a narrow split (shallow
+75 km at 9 deg from 5 km depth, deep 90 km at 20 deg, half the moment each) is
+the **only source tested here that satisfies all four physical observables at
+once** — Mw 9.00, peak slip 57 m, peak uplift 13.9 m, subsidence &minus;1.36 m.
+Every single-plane variant misses at least one; the best of them is 55% high on
+uplift and produces a third of the observed subsidence.
+
+Measured, all at n = 0.033 on the open DEM:
+
+| geometry | M0 | DART | K | &kappa; | bias | RMS | dry |
+|---|------|------|------|------|-------|------|-----|
+| narrow, f = 0.5 | 4.0e22 | 0.86 | 0.97 | **1.68** | &minus;0.16 | **2.74** | 69 |
+| narrow, f = 0.6 | 4.0e22 | 1.00 | 1.12 | 1.69 | &minus;0.91 | 2.71 | 76 |
+| wide, f = 0.85 | 5.2e22 | 1.59 | 0.71 | 1.79 | +1.77 | 3.51 | 63 |
+| wide, f = 0.85 | 6.2e22 | 1.90 | 0.60 | 1.78 | +2.95 | 4.54 | 57 |
+
+`f` is the fraction of the moment on the shallow segment; "wide" is shallow
+150 km at 9 deg with a 60 km deep segment.
+
+**The split fault does decouple the far field from the coast** — the first
+thing tested here that does. Moving moment from the deep segment to the shallow
+one (f 0.5 -> 0.6) raised the DART peak 16% *and* dropped coastal heights 15%,
+in opposite directions. Width, taper position and compactness all failed to do
+that on a single plane.
+
+**It still cannot match both.** Made strong enough to reach DART 1.87 it
+over-predicts the coast worse than the single plane (K 0.60 against 0.72),
+because keeping peak slip physical requires widening the shallow segment, which
+broadens the uplift and destroys the decoupling. Extrapolating the narrow
+geometry to hit both targets lands at f = 0.77, M0 = 6.05e22 and ~130 m of peak
+slip. Confirmed from both directions: **within physical slip the split cannot
+satisfy DART and the survey simultaneously.**
+
+#### The unresolved tension
+
+The f = 0.5 row is the important one. It is the **best coastal fit measured in
+this repo** — K 0.97, &kappa; 1.68, RMS 2.74, bias &minus;0.16 m, with *no
+friction retuning at all* — and it carries **46% of the required DART
+amplitude**. For comparison, at K ~ 1 the best single plane manages &kappa; 1.81
+/ RMS 3.83 and the recalibrated KL &kappa; 1.76 / RMS 4.36.
+
+Lining the DART-matched sources up by how badly they then over-predict the
+coast:
+
+| source at DART ~ 1.87 | K at n = 0.033 |
+|---|---|
+| KL 200 x 50, slip 71 | 0.86 |
+| deterministic 400 x 150 | 0.72 |
+| split wide, f = 0.85 | 0.60 |
+| *split narrow f = 0.5, at DART 0.86* | *0.97* |
+
+So the coast prefers a source **roughly half** the far-field strength that DART
+implies, and the discrepancy is a property of the model rather than of any
+source: no distribution tested closes it. Candidates, none tested:
+
+- the coast is over-amplified — 450 m bathymetry over the shelf, the effective
+  friction standing in for unresolved roughness, or the shallow-water physics
+  at the shelf break;
+- the far field is under-propagated — numerical dissipation over the 500 km
+  path to 21418, again on 450 m bathymetry;
+- the source is mislocated in a way that costs far-field amplitude. Note the
+  `x0` shift of 40 km west, which was tuned for *arrival time* on the old
+  200 x 50 km plane and has never been revisited against amplitude.
+
+That last one is the cheapest to check and should be first.
+
+
 ## Gotchas
 
 - **`iseed` in `run_Tohoku_okada.py` does not select the slip realisation.** Despite its comment, the top-level `iseed` only feeds the run name (`Okada_<iseed>` → `_output_Okada_<iseed>`); the actual KL draw is fixed by the hard-coded `iseed=1001` in the `okl.kl_deformation(...)` call. `setup_simulation.apply_deformation()` similarly hard-codes `iseed=1234`. Change both if you want a genuinely different realisation.

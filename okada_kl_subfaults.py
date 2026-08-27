@@ -322,3 +322,77 @@ def kl_slipfield(epicenters_E, epicenters_N, epicenters_D, length, width, slip, 
 
     return s, D, V, z, C_hat
 
+
+
+def segment_placement(xt, yt, segments, strike=195.0):
+    """Locate the centre of each segment of a multi-segment (listric) fault.
+
+    Segments are listed from the trench landward and **abut**: each starts
+    where the previous one ended, in both horizontal distance and depth, so a
+    steeper deep segment can be hung off a shallow near-trench one.  `xt`, `yt`
+    are the absolute UTM position of the up-dip (trench) edge, and only the
+    first segment needs a `top_depth`.
+
+    Each segment is a dict with `dip` (degrees), `width` (m, along dip) and,
+    for the first, `top_depth` (m).  Returns a matching list of dicts carrying
+    the `xoff`, `yoff` and centroid `depth` that sum_subfault_deformation()
+    wants.
+    """
+    out = []
+    h = 0.0                              # horizontal distance from the trench
+    d = segments[0]['top_depth']         # depth of the current segment's top
+    for s in segments:
+        dip = np.deg2rad(s['dip'])
+        W = s['width']
+        hc = h + 0.5*W*np.cos(dip)
+        dc = d + 0.5*W*np.sin(dip)
+        out.append(dict(xoff=xt + hc*np.cos(np.deg2rad(strike)),
+                        yoff=yt - hc*np.sin(np.deg2rad(strike)),
+                        depth=dc, dip=s['dip'], width=W))
+        h += W*np.cos(dip)
+        d += W*np.sin(dip)
+    return out
+
+
+def split_fault_deformation(x, y, xt, yt, segments, length=400000.0,
+                            strike=195.0, rake=87.0, nu=0.25, opening=0.0,
+                            N_subfault=10, E_subfault=10):
+    """Sea-bed deformation from a segmented fault with per-segment slip.
+
+    Each segment carries its own dip, width, moment and taper, so the shallow
+    near-trench part (which generates the tsunami) and the deep part (which
+    produces the coastal subsidence) can be set independently.  On a single
+    uniform-dip plane they cannot: matching the ~1.2 m of surveyed coastal
+    subsidence forces slip down dip, which is exactly where it over-loads the
+    coast.  See CLAUDE.md, *Split fault*.
+
+    Segment dicts take `dip`, `width`, `M0` and (first segment only)
+    `top_depth`, plus optional taper parameters `u0`/`sig_u`/`v0`/`sig_v`
+    passed through to deterministic_slip().
+
+    Returns (uE, uN, uZ, slips) with `slips` a list, one array per segment.
+    """
+    placement = segment_placement(xt, yt, segments, strike)
+
+    uE_sum = np.zeros_like(x)
+    uN_sum = np.zeros_like(x)
+    uZ_sum = np.zeros_like(x)
+    slips_all = []
+
+    for s, p in zip(segments, placement):
+        slips = deterministic_slip(N_subfault=N_subfault, E_subfault=E_subfault,
+                                   length=length, width=p['width'], M0=s['M0'],
+                                   u0=s.get('u0', 0.5), sig_u=s.get('sig_u', 0.15),
+                                   v0=s.get('v0', 0.5), sig_v=s.get('sig_v', 0.30))
+
+        uE, uN, uZ = sum_subfault_deformation(
+            x, y, slips, xoff=p['xoff'], yoff=p['yoff'], depth=p['depth'],
+            length=length, width=p['width'], strike=strike, dip=p['dip'],
+            rake=rake, nu=nu, opening=opening)
+
+        uE_sum += uE
+        uN_sum += uN
+        uZ_sum += uZ
+        slips_all.append(slips)
+
+    return uE_sum, uN_sum, uZ_sum, slips_all
