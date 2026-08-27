@@ -524,8 +524,8 @@ Use `--elevation-source pts`; the driver caches the 1.34 M-point
 LinearNDInterpolator result to `_pts_elev_<ncells>.npy` (15 s to build, then
 reused), which is gitignored.
 
-One separate finding from the same sweep: **the `x0` shift is a compromise, not
-a tuned optimum.** Arrival time wants the source *west* (34 min against 33
+One separate finding, from the `x0` sweep above rather than the `pts` one:
+**the `x0` shift is a compromise, not a tuned optimum.** Arrival time wants the source *west* (34 min against 33
 observed, versus 30 at baseline) while the coastal fit wants it *east*
 (K 0.97 -> 0.79 and &kappa; 1.68 -> 1.78 as it moves west). The 40 km shift was
 derived for arrival time on the old 200 x 50 km plane and does not transfer to
