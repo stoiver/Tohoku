@@ -18,6 +18,9 @@ closeup_extent = [475_000, 580_000, 4_150_000, 4_280_000]
 md = 0.01
 
 p = argparse.ArgumentParser()
+p.add_argument('--source', choices=['det', 'kl'], default='det')
+p.add_argument('--slip', type=float, default=84.0)   # kl only: nominal mean slip
+p.add_argument('--iseed', type=int, default=1234)    # kl only
 p.add_argument('--M0', type=float, default=4.2e22)
 p.add_argument('--sig-u', type=float, default=0.20)
 p.add_argument('--v0', type=float, default=0.5)
@@ -63,10 +66,18 @@ domain.set_quantity('friction', a.friction)
 # --- deterministic source -------------------------------------------------
 x = domain.centroid_coordinates[:, 0]
 y = domain.centroid_coordinates[:, 1]
-uE, uN, uZ, slips = okl.deterministic_deformation(
-    x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
-    M0=a.M0, u0=0.5, sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
-    depth=a.depth, length=a.length, width=a.width)
+if a.source == 'det':
+    uE, uN, uZ, slips = okl.deterministic_deformation(
+        x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
+        M0=a.M0, u0=0.5, sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+        depth=a.depth, length=a.length, width=a.width)
+else:
+    uE, uN, uZ, slips = okl.kl_deformation(
+        x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
+        E_subfault=10, N_subfault=10, sample='sobol', iseed=a.iseed,
+        depth=a.depth, length=a.length, width=a.width,
+        strike=195.0, dip=14.0, rake=87.0, nu=0.25,
+        slip=a.slip, opening=0.0)
 
 Elevation[:] += uZ
 Stage[:]     += uZ
@@ -122,7 +133,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, source=a.source, slip=a.slip, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),

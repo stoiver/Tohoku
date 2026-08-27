@@ -77,7 +77,7 @@ Central config module imported by all simulation scripts. There is no CLI or con
 | `okada.py` | Okada (1985) elastic dislocation model — computes surface displacements (uE, uN, uZ) for a rectangular fault |
 | `okada_subfaults.py` | Divides a fault into sub-faults and sums their Okada displacements |
 | `okada_kl_subfaults.py` | Extends `okada_subfaults` with two slip fields: a KL random draw (`kl_deformation()`) and a smooth moment-normalised taper (`deterministic_slip()` / `deterministic_deformation()`). Both share `sum_subfault_deformation()` for the Okada summation |
-| `calibrate_deterministic.py` | Scriptable one-run calibration driver for the deterministic source: builds the notebook's domain, applies the source, evolves, and appends DART peak / Aida K / &kappa; / bias / RMS / dry count to `calibration_results.jsonl` |
+| `calibrate_deterministic.py` | Scriptable one-run calibration driver for either source (`--source det|kl`): builds the notebook's domain, applies the source, evolves, and appends DART peak / Aida K / &kappa; / bias / RMS / dry count to `calibration_results.jsonl` |
 | `setup_simulation.py` | Higher-level helpers: `create_domain()`, `apply_deformation()`, `evolve_domain()`, and gauge recording classes |
 | `project.py` | Scenario parameters, mesh polygons, resolution settings |
 | `tsunami_observations.py` | Loads the TTJS surveyed inundation/run-up heights for validation; subsetting by UTM extent or by gauge |
@@ -107,14 +107,28 @@ Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the 
 
 ### Notebook defaults
 
-`notebook_tohoku_open_elevation.ipynb` ships `flow_algorithm = 'DE_ader2'`, `slip = 84`, `friction = 0.033`, `elevation_source = 'open'`: DART peak 1.88 m against 1.87 m observed, **K = 1.00**, κ = 1.70, bias +0.20 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and no lever tested so far moves it — see the κ floor below.
+`notebook_tohoku_open_elevation.ipynb` still ships `flow_algorithm = 'DE_ader2'`, `slip = 84`, `friction = 0.033`, `elevation_source = 'open'`. **Those values are stale**: they were calibrated when the KL field's `alpha` was 0.75, which inflated the realised slip (see *Gotchas*). At the corrected `alpha = 0.4` the same nominal `slip = 84` raises the realised mean from 50.1 m to 65.9 m, a 1.32x stronger source.
+
+**The recalibrated pair is `slip = 71`, `friction = 0.038`** — DART 1.87 m against 1.87 m observed, K = 1.01, κ = 1.76, bias +0.39 m, 67 of ~1700 survey points left dry. Measured on the full mesh under DE_ader2 with the open DEM:
+
+| slip | n | DART | K | κ | bias | RMS | dry |
+|------|-------|------|------|------|-------|------|-----|
+| 64 | 0.033 | 1.68 | 0.95 | 1.70 | +0.50 | 4.05 | 68 |
+| 71 | 0.033 | 1.87 | 0.86 | **1.69** | +1.02 | 4.51 | 66 |
+| 71 | 0.036 | 1.87 | 0.95 | 1.72 | +0.63 | 4.41 | 66 |
+| **71** | **0.038** | **1.87** | **1.01** | 1.76 | +0.39 | 4.36 | 67 |
+| 71 | 0.040 | 1.87 | 1.08 | 1.88 | +0.15 | 4.33 | 69 |
+
+Note that **K and κ no longer co-optimise**. Before the `alpha` fix they coincided at n = 0.033 (K 1.00, κ 1.70); now κ bottoms at 1.69 at n = 0.033 where K is only 0.86, and reaching K = 1 costs 0.07 of κ. The deterministic source splits the same way (see *Deterministic source*), so the old coincidence looks like an artefact of the negative-slip field rather than a property worth chasing. K is the conventional measure, so 0.038 is the recommended choice; take n = 0.036 (K 0.95, κ 1.72) if κ matters more for your purpose — both sit inside the Japanese guideline band 0.95 < K < 1.05.
+
+Also note the KL slip scaling is **not** simply the ratio of realised mean slips: predicting from that gave slip 64 and a DART peak of 1.68 m, because `alpha` reshapes the field and DART responds to peak uplift as well as mean strength. Measure the sensitivity instead — it is 0.0263 m of DART peak per metre of nominal slip here.
 
 **Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
 
 1. set `slip` from the DART 21418 peak, then
 2. set `friction` from Aida K against the survey.
 
-Under DE_ader2 at slip 84: n = 0.03 → K = 0.93; n = 0.033 → K = 1.00, κ = 1.70, bias +0.20 m; n = 0.035 → K = 1.06. (Under DE0 at slip 81 the same sweep gave n = 0.03 → K = 0.95, n = 0.035 → K = 1.08, n = 0.04 → K = 1.24.) **The calibrated pair is solver-specific** — changing the flow algorithm shifts slip by a few per cent and friction by ~10%, so recalibrate if you change it. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
+Under DE_ader2 at slip 84: n = 0.03 → K = 0.93; n = 0.033 → K = 1.00, κ = 1.70, bias +0.20 m; n = 0.035 → K = 1.06. (Under DE0 at slip 81 the same sweep gave n = 0.03 → K = 0.95, n = 0.035 → K = 1.08, n = 0.04 → K = 1.24.) **The calibrated pair is solver-specific** — changing the flow algorithm shifts slip by a few per cent and friction by ~10%, so recalibrate if you change it. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice. **All the numbers in this subsection predate the `alpha` fix and are superseded** by the recalibration table above; the reasoning about stage ordering and solver-specificity still stands.
 
 These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — see *Gotchas*. Before those fixes the notebook used slip 60 with n = 0.04; that pairing is meaningless now, since the old uniform-deviate bug inflated the slip field and the same settings give K = 1.54 with a DART peak of 1.38 m against the corrected code.
 
@@ -218,7 +232,7 @@ Reading it:
 - **κ bottoms out at n = 0.03 (1.69), the same place as K.** The κ = 2.01 at n = 0.02 breaks the pattern, sitting above both its neighbours; unexplained, possibly a partial-wetting effect at that damping, and left in rather than smoothed away.
 - **`dry` rises monotonically with n** — height accuracy is bought with inundation extent. That trades directly against the DEM choice, where `Tohoku.pts` takes dry from 64 to 3, so pair the two rather than tuning either alone.
 
-An earlier version of this table was measured at slip 60 before the KL fixes (`eigh`, normal Sobol deviates). The shape was the same but the optimum sat at n = 0.04; those numbers are superseded.
+An earlier version of this table was measured at slip 60 before the KL fixes (`eigh`, normal Sobol deviates). The shape was the same but the optimum sat at n = 0.04; those numbers are superseded. **This table is itself now superseded** — it predates the `alpha` 0.75 -> 0.4 fix. Its shape survives (κ bottoming near the K optimum, `dry` rising monotonically with n, DART flat in n), but the operating point has moved: see the recalibration table under *Notebook defaults*.
 
 ### Sources
 
@@ -397,6 +411,9 @@ Four things to carry away:
   length; at width 100 km it is 20 km against 40 km along-strike subfaults, so
   the field is nearly uncorrelated along strike. Longer `r0` smooths it but
   *increases* the spread at fixed `alpha`, so tune the two together.
+  Recalibrated: the KL path now wants `slip = 71` with `friction = 0.038`
+  (was 84 / 0.033) — see *Notebook defaults*. The notebooks have **not** been
+  updated and still ship the stale pair.
 - **The KL slip field had two bugs, now fixed — don't reintroduce them.** `kl_correlation_matrices` used `np.linalg.eig` on a symmetric covariance matrix; that is the general non-symmetric LAPACK routine, which may return complex-conjugate eigenpairs, and the complex values propagate through `sqrtD` into the slip field and `okada()`. **It depends on the numpy version, not the platform**: with `eig` restored, CI fails on numpy 2.5.2 under both OpenBLAS and Accelerate, and passes on numpy 2.4.6 under both (run 32253704090). It was first hit on macOS with Python 3.12, which made it look platform-specific; it is not. Use `np.linalg.eigh`, and clip eigenvalues at 0 before the sqrt. Separately, `sample='sobol'` fed raw Sobol points — uniform on [0,1) — into an expansion that wants standard normals, giving every mode a coefficient with mean 0.5 instead of 0; this inflated the slip field, which is why the KL source needed `slip = 60` to match DART while published inversions peak at 7–16 m of uplift. Both are covered by `tests/test_okada_kl.py`.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
