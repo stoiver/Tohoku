@@ -458,7 +458,11 @@ source: no distribution tested closes it. Candidates, none tested:
   friction standing in for unresolved roughness, or the shallow-water physics
   at the shelf break;
 - the far field is under-propagated — numerical dissipation over the 500 km
-  path to 21418, again on 450 m bathymetry;
+  path to 21418, again on 450 m bathymetry. **Not the solver**: `DE1` on the
+  identical split f = 0.5 case raised DART 10% (0.86 -> 0.95 m) but raised
+  coastal heights ~20% (K 0.97 -> 0.81), taking the DART/coast ratio from
+  0.834 to 0.769 — the gap widens — at 1.66x the runtime (106 s against 64 s).
+  &kappa; moved 1.68 -> 1.69. Tested and eliminated;
 - the source is mislocated in a way that costs far-field amplitude. Note the
   `x0` shift of 40 km west, which was tuned for *arrival time* on the old
   200 x 50 km plane and has never been revisited against amplitude.

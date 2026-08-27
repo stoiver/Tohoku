@@ -18,6 +18,7 @@ closeup_extent = [475_000, 580_000, 4_150_000, 4_280_000]
 md = 0.01
 
 p = argparse.ArgumentParser()
+p.add_argument('--flow-algorithm', default='DE_ader2')
 p.add_argument('--source', choices=['det', 'kl', 'split'], default='det')
 p.add_argument('--split-frac', type=float, default=0.6)   # moment fraction, shallow segment
 p.add_argument('--dip1', type=float, default=8.0)
@@ -53,7 +54,7 @@ domain = anuga.create_domain_from_regions(
     interior_regions=project.interior_regions,
     use_cache=False, verbose=False)
 
-domain.set_flow_algorithm('DE_ader2')
+domain.set_flow_algorithm(a.flow_algorithm)
 domain.set_epsg(32654)
 domain.set_collect_max_quantities()
 domain.set_compute_mode('unified')
@@ -153,7 +154,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, algorithm=a.flow_algorithm, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),
