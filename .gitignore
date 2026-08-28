@@ -6,6 +6,7 @@ __pycache__/
 # ANUGA simulation output
 *.sww
 *.msh
+*.tsh
 anuga_*.log
 
 # Per-run and rendering output directories
