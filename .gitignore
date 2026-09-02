@@ -6,6 +6,9 @@ __pycache__/
 # ANUGA simulation output
 *.sww
 *.msh
+*.tsh
+*.tsh.gz
+*.msh.gz
 anuga_*.log
 
 # Per-run and rendering output directories
@@ -19,3 +22,6 @@ screenshots/
 *.tif
 *.georef
 tohoku_open_dem*.jpg
+
+# cached Tohoku.pts interpolation onto a mesh (see calibrate_deterministic.py)
+_pts_elev_*.npy

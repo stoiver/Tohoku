@@ -121,3 +121,37 @@ def test_kl_deformation_end_to_end():
         assert np.isrealobj(a_), f'{name} came back complex'
         assert np.isfinite(a_).all(), f'{name} contains NaN or inf'
     assert uZ.max() > 0.0 and uZ.min() < 0.0
+
+
+def test_split_fault_reduces_to_single_plane():
+    """A one-segment split fault must reproduce deterministic_deformation().
+
+    Guards the segment placement arithmetic in segment_placement(), which
+    converts an along-dip offset from the trench into a UTM centre and a
+    centroid depth.  Getting it wrong shifts the whole source by tens of km
+    while still producing a plausible-looking deformation field.
+    """
+    km = 1000.0
+    x = np.linspace(400*km, 900*km, 40)
+    y = np.linspace(4000*km, 4400*km, 40)
+
+    depth, width, dip, strike = 23*km, 150*km, 14.0, 195.0
+    x0, y0 = 680*km, 4200*km
+
+    _, _, uZ_single, _ = okl.deterministic_deformation(
+        x, y, xoff=x0, yoff=y0, M0=3.8e22, sig_u=0.15, v0=0.25,
+        depth=depth, length=400*km, width=width)
+
+    # up-dip (trench) edge of that same plane
+    h = -0.5*width*np.cos(np.deg2rad(dip))
+    xt = x0 + h*np.cos(np.deg2rad(strike))
+    yt = y0 - h*np.sin(np.deg2rad(strike))
+    top = depth - 0.5*width*np.sin(np.deg2rad(dip))
+
+    _, _, uZ_split, _ = okl.split_fault_deformation(
+        x, y, xt, yt,
+        [dict(dip=dip, width=width, top_depth=top, M0=3.8e22,
+              sig_u=0.15, v0=0.25)],
+        length=400*km, strike=strike)
+
+    assert np.allclose(uZ_split, uZ_single, atol=1e-9)

@@ -76,7 +76,8 @@ Central config module imported by all simulation scripts. There is no CLI or con
 |------|---------|
 | `okada.py` | Okada (1985) elastic dislocation model — computes surface displacements (uE, uN, uZ) for a rectangular fault |
 | `okada_subfaults.py` | Divides a fault into sub-faults and sums their Okada displacements |
-| `okada_kl_subfaults.py` | Extends `okada_subfaults` with a KL-based random slip field for uncertainty quantification; `kl_deformation()` is the main entry point |
+| `okada_kl_subfaults.py` | Extends `okada_subfaults` with two slip fields: a KL random draw (`kl_deformation()`) and a smooth moment-normalised taper (`deterministic_slip()` / `deterministic_deformation()`). Both share `sum_subfault_deformation()` for the Okada summation |
+| `calibrate_deterministic.py` | Scriptable one-run calibration driver for either source (`--source det|kl`): builds the notebook's domain, applies the source, evolves, and appends DART peak / Aida K / &kappa; / bias / RMS / dry count to `calibration_results.jsonl` |
 | `setup_simulation.py` | Higher-level helpers: `create_domain()`, `apply_deformation()`, `evolve_domain()`, and gauge recording classes |
 | `project.py` | Scenario parameters, mesh polygons, resolution settings |
 | `tsunami_observations.py` | Loads the TTJS surveyed inundation/run-up heights for validation; subsetting by UTM extent or by gauge |
@@ -106,18 +107,34 @@ Scored with Aida's (1978) *K* and *&kappa;* over the ~1700 survey points in the 
 
 ### Notebook defaults
 
-`notebook_tohoku_open_elevation.ipynb` ships `flow_algorithm = 'DE_ader2'`, `slip = 84`, `friction = 0.033`, `elevation_source = 'open'`: DART peak 1.88 m against 1.87 m observed, **K = 1.00**, κ = 1.70, bias +0.20 m, 68 of ~1700 survey points left dry. K = 0.95 is inside the Japanese guideline band (0.95 < K < 1.05); κ is not, and no lever tested so far moves it — see the κ floor below.
+`notebook_tohoku_open_elevation.ipynb` ships `flow_algorithm = 'DE_ader2'`, `slip = 71`, `friction = 0.038`, `elevation_source = 'open'`. It previously shipped `slip = 84` / `friction = 0.033`, which were calibrated when the KL field's `alpha` was 0.75, which inflated the realised slip (see *Gotchas*). At the corrected `alpha = 0.4` the same nominal `slip = 84` raises the realised mean from 50.1 m to 65.9 m, a 1.32x stronger source.
+
+**The recalibrated pair is `slip = 71`, `friction = 0.038`** — DART 1.87 m against 1.87 m observed, K = 1.01, κ = 1.76, bias +0.39 m, 67 of ~1700 survey points left dry. Measured on the full mesh under DE_ader2 with the open DEM:
+
+| slip | n | DART | K | κ | bias | RMS | dry |
+|------|-------|------|------|------|-------|------|-----|
+| 64 | 0.033 | 1.68 | 0.95 | 1.70 | +0.50 | 4.05 | 68 |
+| 71 | 0.033 | 1.87 | 0.86 | **1.69** | +1.02 | 4.51 | 66 |
+| 71 | 0.036 | 1.87 | 0.95 | 1.72 | +0.63 | 4.41 | 66 |
+| **71** | **0.038** | **1.87** | **1.01** | 1.76 | +0.39 | 4.36 | 67 |
+| 71 | 0.040 | 1.87 | 1.08 | 1.88 | +0.15 | 4.33 | 69 |
+
+Note that **K and κ no longer co-optimise**. Before the `alpha` fix they coincided at n = 0.033 (K 1.00, κ 1.70); now κ bottoms at 1.69 at n = 0.033 where K is only 0.86, and reaching K = 1 costs 0.07 of κ. The deterministic source splits the same way (see *Deterministic source*), so the old coincidence looks like an artefact of the negative-slip field rather than a property worth chasing. K is the conventional measure, so 0.038 is the recommended choice; take n = 0.036 (K 0.95, κ 1.72) if κ matters more for your purpose — both sit inside the Japanese guideline band 0.95 < K < 1.05.
+
+Also note the KL slip scaling is **not** simply the ratio of realised mean slips: predicting from that gave slip 64 and a DART peak of 1.68 m, because `alpha` reshapes the field and DART responds to peak uplift as well as mean strength. Measure the sensitivity instead — it is 0.0263 m of DART peak per metre of nominal slip here.
 
 **Calibrate in two stages, in this order — the knobs are orthogonal.** The modelled DART peak is linear in slip (0.023 m of peak per metre of slip) and friction does not touch it at all: at slip 81 the peak is 1.86 m for n = 0.03, 0.035 and 0.04 alike. So
 
 1. set `slip` from the DART 21418 peak, then
 2. set `friction` from Aida K against the survey.
 
-Under DE_ader2 at slip 84: n = 0.03 → K = 0.93; n = 0.033 → K = 1.00, κ = 1.70, bias +0.20 m; n = 0.035 → K = 1.06. (Under DE0 at slip 81 the same sweep gave n = 0.03 → K = 0.95, n = 0.035 → K = 1.08, n = 0.04 → K = 1.24.) **The calibrated pair is solver-specific** — changing the flow algorithm shifts slip by a few per cent and friction by ~10%, so recalibrate if you change it. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice.
+Under DE_ader2 at slip 84: n = 0.03 → K = 0.93; n = 0.033 → K = 1.00, κ = 1.70, bias +0.20 m; n = 0.035 → K = 1.06. (Under DE0 at slip 81 the same sweep gave n = 0.03 → K = 0.95, n = 0.035 → K = 1.08, n = 0.04 → K = 1.24.) **The calibrated pair is solver-specific** — changing the flow algorithm shifts slip by a few per cent and friction by ~10%, so recalibrate if you change it. K and the arithmetic bias optimise at slightly different n because K is a geometric mean of ratios (weighting the many small-height points) and the bias is an arithmetic mean of differences (weighting the few large ones). K is the conventional measure, so 0.03 is the shipped choice. **All the numbers in this subsection predate the `alpha` fix and are superseded** by the recalibration table above; the reasoning about stage ordering and solver-specificity still stands.
 
 These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — see *Gotchas*. Before those fixes the notebook used slip 60 with n = 0.04; that pairing is meaningless now, since the old uniform-deviate bug inflated the slip field and the same settings give K = 1.54 with a DART peak of 1.38 m against the corrected code.
 
 ### Best configuration found
+
+> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term — DART 1.87 m, K 0.98, κ 1.64. See *Horizontal push*. Everything in this subsection predates that term and is kept for the record.
 
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
 
@@ -135,7 +152,7 @@ The UCSB3 rows predate the KL fixes but are unaffected by them: those runs take 
 Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
-- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not — nor is it the solver (*Flow algorithm*), nor missing sea defences (*Coastal defences*), each tested and eliminated. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
+- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** ***Superseded — κ = 1.63 is now reached; see* Horizontal push *below. The rest of this bullet stands for the pre-push runs.*** *(The mechanism is partly known: κ is mathematically invariant under any uniform rescaling of the modelled heights, so no strength knob can move it — see* &kappa; *is scale-invariant, below.)* Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not — nor is it the solver (*Flow algorithm*), nor missing sea defences (*Coastal defences*), each tested and eliminated. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
 
 ### Flow algorithm
 
@@ -217,7 +234,7 @@ Reading it:
 - **κ bottoms out at n = 0.03 (1.69), the same place as K.** The κ = 2.01 at n = 0.02 breaks the pattern, sitting above both its neighbours; unexplained, possibly a partial-wetting effect at that damping, and left in rather than smoothed away.
 - **`dry` rises monotonically with n** — height accuracy is bought with inundation extent. That trades directly against the DEM choice, where `Tohoku.pts` takes dry from 64 to 3, so pair the two rather than tuning either alone.
 
-An earlier version of this table was measured at slip 60 before the KL fixes (`eigh`, normal Sobol deviates). The shape was the same but the optimum sat at n = 0.04; those numbers are superseded.
+An earlier version of this table was measured at slip 60 before the KL fixes (`eigh`, normal Sobol deviates). The shape was the same but the optimum sat at n = 0.04; those numbers are superseded. **This table is itself now superseded** — it predates the `alpha` 0.75 -> 0.4 fix. Its shape survives (κ bottoming near the K optimum, `dry` rising monotonically with n, DART flat in n), but the operating point has moved: see the recalibration table under *Notebook defaults*.
 
 ### Sources
 
@@ -234,6 +251,386 @@ Scored on a coarse mesh (all `res_*` × 8) unless noted, with the deformation ad
 
 Fault-parameter sweeps (depth 9–20 km, width 50–120 km, length 200–500 km, and a two-segment source with a shallow near-trench strip) did **not** decouple the far field from the coast: every configuration strong enough to match DART over-predicted the survey ~2×, and enlarging the fault raised coastal height faster than the DART peak. The single-plane 200 × 50 km at 20 km depth remains the best joint geometry. Friction, not source geometry, is what resolves the tension — which is why the friction table above matters more than any of the source variants.
 
+Those sweeps varied the *plane* with uniform slip, which changes moment and slip distribution together. The distribution *within* the plane is a separate lever, tested later — see *Deterministic source* below. It does decouple the two (narrowing the width raised the DART peak 36% while K moved 4%), but not usefully: every configuration that improved the far-field/coast ratio degraded &kappa;.
+
+### Deterministic source
+
+`deterministic_slip()` replaces the KL random draw with a smooth reproducible
+slip field: a separable Gaussian taper over the plane, scaled so the fault
+carries a prescribed seismic moment.
+
+```python
+uE, uN, uZ, slips = okl.deterministic_deformation(
+    x, y, xoff=x0 - xll, yoff=y0 - yll,
+    M0=3.8e22, u0=0.5, sig_u=0.15, v0=0.25, sig_v=0.30,
+    depth=23*km, length=400*km, width=150*km)
+```
+
+`u` is the along-strike coordinate and `v` the down-dip one, both normalised to
+(0, 1) with **v = 0 at the trench**; `u0`/`v0` place the slip peak and
+`sig_u`/`sig_v` set how tightly it concentrates. Amplitude is *not* a free
+parameter — it follows from `M0 = rigidity * area * mean(slip)`, so retapering
+redistributes slip without touching the moment.
+
+**Subfault indexing is easy to get wrong.** `slips[i, j]` has i along strike and
+j down dip, with **j = 0 the shallow trench edge**. With `strike = 195` the
+along-strike sense flips, so **i = 0 is the *south* end**.
+
+The point of it is checkability. The KL source's amplitude knob (`slip`) has no
+physical meaning, and the shipped calibration sits at `slip = 84` on a
+200 x 50 km plane — Mw 8.95 packed onto a tenth of the real rupture area, an
+effective source rather than a physical one. The deterministic source can be
+checked against published quantities, and at M0 = 4.41e22 it hits all of them:
+Mw 9.03, peak slip 52 m, peak sea-bed uplift 13.8 m, ~1.2 m of coastal
+subsidence, slip above 20 m spanning ~240 km along strike.
+
+Sweep it with `calibrate_deterministic.py`, which mirrors the notebook exactly
+(DE_ader2, open DEM, Flather boundaries, 2 h evolve) and scores one run in
+**64 s** on the GPU at the full ~355 000-triangle mesh:
+
+```bash
+python calibrate_deterministic.py --M0 3.8e22 --sig-u 0.15 --v0 0.25 --friction 0.045
+```
+
+**Run these one at a time** — one GPU, and concurrent runs contend for it.
+
+#### &kappa; is scale-invariant, which explains the &kappa; floor
+
+*K* is a geometric mean of `obs/model` and &kappa; its geometric standard
+deviation. Scaling every modelled height by a constant `c` shifts each
+log-ratio by `-log(c)` — a constant — leaving the standard deviation **exactly**
+unchanged. So
+
+> **no uniform amplitude knob can move &kappa;.** Not `slip`, not `M0`, not
+> anything that rescales the whole modelled field. Such knobs move *K* alone.
+
+Measured, at fixed shape and friction: M0 = 4.20e22 gives &kappa; = 1.718 and
+M0 = 4.41e22 gives &kappa; = 1.715, a 5% amplitude change moving &kappa; by 0.003.
+
+This is the mechanism behind the &kappa; ~ 1.7 floor recorded throughout this
+file. Only levers that change the *shape* of the modelled height distribution —
+friction, DEM, mesh, solver, source *geometry* — can touch &kappa; at all, and
+measurably they move it by ~0.1 at best. Any future attempt on &kappa; must
+change shape; tuning strength is provably wasted effort.
+
+#### Calibration strategy
+
+Three stages, but **only friction is truly orthogonal to DART**:
+
+1. **`M0` from the DART 21418 peak.** Linear and friction-independent — one
+   rescale by 1.87/1.78 moved the peak from 1.78 m to 1.87 m at 32 min and it
+   stayed there across every friction tested.
+2. **`v0` / `sig_v` from the coastal subsidence** (GEONET measured ~1.0-1.2 m at
+   Oshika in 2011; the model's mean over the survey box is the proxy). This is
+   an observable the repo had not been using, and it is what pins the down-dip
+   slip position.
+3. **`friction` from Aida *K*.**
+
+**Stages 1 and 2 are not independent of each other.** Any geometry change —
+`sig_u`, `width`, `length` — moves the DART peak, because DART responds to peak
+uplift as well as displaced volume. Displaced volume *is* nearly invariant at
+fixed moment (174-245 km3 across every distribution tried), but that is not
+enough to pin DART. Re-run stage 1 after any geometry change.
+
+#### Measured results
+
+Friction curve at the best deterministic configuration found
+(M0 = 3.80e22, `sig_u` 0.15, `v0` 0.25, 400 x 150 km at 23 km, open DEM):
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.033 | 1.85 | 0.72 | **1.66** | +1.89 | 4.29 | 62 |
+| 0.040 | 1.85 | 0.88 | 1.73 | +0.92 | 3.95 | 64 |
+| **0.045** | 1.85 | **1.03** | 1.81 | +0.26 | 3.83 | 65 |
+| 0.050 | 1.85 | 1.22 | 1.92 | &minus;0.36 | 3.70 | 73 |
+
+The source-shape survey, all at n = 0.033 unless noted:
+
+| configuration | DART | K | &kappa; | bias | dry |
+|---|------|------|------|-------|-----|
+| `v0` 0.50, `sig_u` 0.20, M0 4.41e22 | 1.87 | 0.62 | 1.72 | +2.87 | 57 |
+| `v0` 0.35 | 1.77 | 0.67 | 1.67 | +2.31 | 62 |
+| `v0` 0.25 | 1.86 | 0.70 | **1.67** | +2.04 | 60 |
+| `sig_u` 0.15 (`v0` 0.50) | 2.17 | 0.56 | 1.74 | +3.81 | **20** |
+| `sig_u` 0.12, M0 3.50e22 | 1.96 | 0.72 | 1.66 | +1.89 | 62 |
+| width 100 km, depth 17 km | 2.40 | 0.75 | 1.92 | +2.13 | 60 |
+| width 75 km, depth 14 km | 2.52 | 0.73 | 1.79 | +2.22 | 64 |
+
+**Verdict: the deterministic source is comparable to the shipped KL config, not
+better.** Calibrated at n = 0.045 it gives K = 1.03, &kappa; = 1.81, bias +0.26,
+RMS 3.83, 65 dry, DART 1.85 — against the KL's K = 1.00, &kappa; = 1.70,
+bias +0.20, RMS 4.06, 68 dry. It wins slightly on RMS and dry count and loses
+clearly on &kappa;. Use it for reproducibility and physical defensibility, not
+for a better fit.
+
+Four things to carry away:
+
+- **For this source family *K* and &kappa; do not co-optimise.** &kappa; bottoms at
+  **1.66** at n = 0.033 — the lowest value anywhere in this file — but *K* is
+  0.72 there, and reaching *K* = 1 costs 0.15 of &kappa;. Under the KL source the
+  two coincide at n = 0.033. The deterministic source carries a
+  friction-independent excess of coastal loading relative to its DART
+  amplitude, so friction gets pushed past its own optimum to compensate.
+- **Width is not the fix.** Narrowing the plane raised the DART peak steeply
+  (1.85 -> 2.40 -> 2.52 m) while *K* barely moved (0.72 -> 0.75 -> 0.73), so it
+  does decouple far field from coast — but it degrades &kappa; (1.66 -> 1.92 at
+  100 km), and since renormalising M0 to recover DART cannot move &kappa; at all
+  (see above), that degradation is permanent. Tested and eliminated.
+- **Compactness buys inundation *extent*.** `sig_u` = 0.15 with `v0` = 0.50 cut
+  the dry count from 57 to **20**, the best figure on the open DEM by a wide
+  margin (previous best 64; beating it before required the proprietary 150 m
+  `Tohoku.pts`). It costs *K* and &kappa;, but if extent is what matters, a
+  shorter sharper source is the lever.
+- **&kappa; ~ 1.7 survives another class of test.** Source *distribution* — taper
+  width, down-dip position, plane width, moment — is a lever never previously
+  tried here, and it lands in 1.66-1.92 like everything else. Sources, DEMs,
+  friction, mesh, solver, riverwalls and now slip distribution all bottom out
+  in the same place.
+
+
+### Split fault
+
+`split_fault_deformation()` hangs several segments off a common trench anchor,
+each abutting the previous in both horizontal distance and depth, with its own
+dip, width, moment and taper. `segment_placement()` does the geometry; it is
+covered by `test_split_fault_reduces_to_single_plane`, which pins a
+one-segment split against `deterministic_deformation()` — worth having, since a
+wrong placement shifts the source tens of km while still producing an entirely
+plausible-looking deformation field.
+
+The motivation is a real limitation of the single plane. Matching the ~1.2 m of
+surveyed coastal subsidence forces slip **down dip**, which is exactly where it
+over-loads the coast; trench-peaked slip fixes the coast and gives near-zero
+subsidence. A listric source can do both, and does: a narrow split (shallow
+75 km at 9 deg from 5 km depth, deep 90 km at 20 deg, half the moment each) is
+the **only source tested here that satisfies all four physical observables at
+once** — Mw 9.00, peak slip 57 m, peak uplift 13.9 m, subsidence &minus;1.36 m.
+Every single-plane variant misses at least one; the best of them is 55% high on
+uplift and produces a third of the observed subsidence.
+
+Measured, all at n = 0.033 on the open DEM:
+
+| geometry | M0 | DART | K | &kappa; | bias | RMS | dry |
+|---|------|------|------|------|-------|------|-----|
+| narrow, f = 0.5 | 4.0e22 | 0.86 | 0.97 | **1.68** | &minus;0.16 | **2.74** | 69 |
+| narrow, f = 0.6 | 4.0e22 | 1.00 | 1.12 | 1.69 | &minus;0.91 | 2.71 | 76 |
+| wide, f = 0.85 | 5.2e22 | 1.59 | 0.71 | 1.79 | +1.77 | 3.51 | 63 |
+| wide, f = 0.85 | 6.2e22 | 1.90 | 0.60 | 1.78 | +2.95 | 4.54 | 57 |
+
+`f` is the fraction of the moment on the shallow segment; "wide" is shallow
+150 km at 9 deg with a 60 km deep segment.
+
+**The split fault does decouple the far field from the coast** — the first
+thing tested here that does. Moving moment from the deep segment to the shallow
+one (f 0.5 -> 0.6) raised the DART peak 16% *and* dropped coastal heights 15%,
+in opposite directions. Width, taper position and compactness all failed to do
+that on a single plane.
+
+**It still cannot match both.** Made strong enough to reach DART 1.87 it
+over-predicts the coast worse than the single plane (K 0.60 against 0.72),
+because keeping peak slip physical requires widening the shallow segment, which
+broadens the uplift and destroys the decoupling. Extrapolating the narrow
+geometry to hit both targets lands at f = 0.77, M0 = 6.05e22 and ~130 m of peak
+slip. Confirmed from both directions: **within physical slip the split cannot
+satisfy DART and the survey simultaneously.**
+
+#### The unresolved tension
+
+> **Largely resolved.** The missing Tanioka & Satake horizontal-push term accounts for most of this gap — see *Horizontal push*. What follows is the state of the investigation before that was found, and the three eliminations in it remain valid.
+
+The f = 0.5 row is the important one. It is the **best coastal fit measured in
+this repo** — K 0.97, &kappa; 1.68, RMS 2.74, bias &minus;0.16 m, with *no
+friction retuning at all* — and it carries **46% of the required DART
+amplitude**. For comparison, at K ~ 1 the best single plane manages &kappa; 1.81
+/ RMS 3.83 and the recalibrated KL &kappa; 1.76 / RMS 4.36.
+
+Lining the DART-matched sources up by how badly they then over-predict the
+coast:
+
+| source at DART ~ 1.87 | K at n = 0.033 |
+|---|---|
+| KL 200 x 50, slip 71 | 0.86 |
+| deterministic 400 x 150 | 0.72 |
+| split wide, f = 0.85 | 0.60 |
+| *split narrow f = 0.5, at DART 0.86* | *0.97* |
+
+So the coast prefers a source **roughly half** the far-field strength that DART
+implies, and the discrepancy is a property of the model rather than of any
+source: no distribution tested closes it. Candidates, none tested:
+
+- the coast is over-amplified — 450 m bathymetry over the shelf, the effective
+  friction standing in for unresolved roughness, or the shallow-water physics
+  at the shelf break;
+- the far field is under-propagated — numerical dissipation over the 500 km
+  path to 21418, again on 450 m bathymetry. **Not the solver**: `DE1` on the
+  identical split f = 0.5 case raised DART 10% (0.86 -> 0.95 m) but raised
+  coastal heights ~20% (K 0.97 -> 0.81), taking the DART/coast ratio from
+  0.834 to 0.769 — the gap widens — at 1.66x the runtime (106 s against 64 s).
+  &kappa; moved 1.68 -> 1.69. Tested and eliminated;
+- ~~the source is mislocated in a way that costs far-field amplitude~~
+  **Tested and eliminated.** Moving the split f = 0.5 source +/- 40 km along
+  the `x0` shift axis:
+
+  | position | DART | arrival | K | &kappa; | RMS |
+  |---|------|--------|------|------|------|
+  | 40 km **east** (shift undone) | **0.76** | 28 min | 1.04 | 1.67 | 2.71 |
+  | baseline | 0.86 | 30 min | 0.97 | 1.68 | 2.74 |
+  | 40 km **west** | 0.85 | **34 min** | 0.79 | 1.78 | 2.81 |
+
+  The whole 80 km sweep spans 0.76-0.86 m of DART peak — a 12% range against
+  the factor of two needed. Note also that moving the source *closer* to the
+  buoy made the peak **smaller**, so far-field amplitude here is governed by
+  directivity, not by geometric spreading along the path; do not reason about
+  it as 1/sqrt(distance).
+
+**The DEM is eliminated too, and with the opposite sign to the hypothesis.**
+Running the DART-matched KL source (slip 71) on `Tohoku.pts` with friction
+re-swept:
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.038 | 1.87 | 0.87 | **1.67** | +0.89 | 4.81 | **11** |
+| **0.045** | 1.87 | **1.05** | **1.67** | **+0.07** | 4.69 | 45 |
+| 0.050 | 1.87 | 1.20 | 1.71 | &minus;0.47 | 4.69 | 51 |
+| 0.055 | 1.87 | 1.37 | 1.76 | &minus;0.97 | 4.72 | 62 |
+
+At fixed friction the 150 m DEM *lowers* K (1.01 -> 0.87 at n = 0.038): the
+finer bathymetry lets **more** water through, so it makes the coastal
+over-prediction worse and wants *more* roughness, not less. The coarse DEM was
+under-amplifying the coast, not over-amplifying it, so this cannot be the
+source of the coast/far-field mismatch.
+
+Note also that **the DART peak is completely unmoved** — 1.87 m at 32 min in
+every row. `Tohoku.pts` covers 330 918 of 354 946 cells including the whole
+source region, so the far-field path is evidently governed by the deep ocean
+east of its coverage, which the GeoTIFF supplies either way.
+
+**So the solver, the source position and the DEM are all eliminated**, and the
+coast/far-field mismatch remains unexplained. What is left, untested: the
+shallow-water physics at the shelf break (no dispersion, no breaking), the
+effective friction standing in for unresolved roughness, or the DART record /
+`x0` reference itself. The recalibration below is worth having regardless.
+
+#### `pts` DEM calibration
+
+**The recalibrated pair on `Tohoku.pts` is `slip = 71`, `friction = 0.045`** —
+DART 1.87 m, K 1.05, &kappa; **1.67**, bias +0.07 m, 45 dry. Against the open
+DEM at n = 0.038 (K 1.01, &kappa; 1.76, 67 dry) it takes &kappa; to the floor
+and wets a third of the missing points, at identical DART. It does not beat the
+repo best (UCSB3 + `pts` + n = 0.05: K 1.06, &kappa; 1.71, RMS 3.74, **5** dry)
+on RMS or extent, but it has the better &kappa;.
+
+The n = 0.038 row is the interesting one for inundation *extent*: **11 dry
+points**, near the repo best, but at K 0.87. Extent and height accuracy trade
+sharply across 0.007 of friction on the fine DEM — pick the end you need.
+
+Use `--elevation-source pts`; the driver caches the 1.34 M-point
+LinearNDInterpolator result to `_pts_elev_<ncells>.npy` (15 s to build, then
+reused), which is gitignored.
+
+One separate finding, from the `x0` sweep above rather than the `pts` one:
+**the `x0` shift is a compromise, not a tuned optimum.** Arrival time wants the source *west* (34 min against 33
+observed, versus 30 at baseline) while the coastal fit wants it *east*
+(K 0.97 -> 0.79 and &kappa; 1.68 -> 1.78 as it moves west). The 40 km shift was
+derived for arrival time on the old 200 x 50 km plane and does not transfer to
+this geometry; the split source arrives 3 min early at the inherited position.
+Re-derive it per source rather than inheriting it, and record which of the two
+constraints it was set from.
+
+
+### Horizontal push (Tanioka & Satake)
+
+**`uE` and `uN` were computed by every source function and then discarded** --
+only `uZ` reached the domain. That is a missing forcing term, not a modelling
+choice, and restoring it resolves most of the coast/far-field mismatch recorded
+below.
+
+Where the sea bed slopes, horizontal motion displaces water. Moving the bed east
+by `uE` replaces the bed at a point with bed that was previously to the west, so
+the effective vertical change is
+
+```
+push = -(uE * dz/dx + uN * dz/dy)          # z = elevation, negative offshore
+stage += uZ + push                          # water surface
+elevation += uZ                             # the bed itself moves by uZ only
+```
+
+applied only where there is water (`elevation < 0`), from the **pre-earthquake**
+bathymetry (`elev_q.compute_gradients()` before the deformation is added).
+`calibrate_deterministic.py` does this by default; `--no-horizontal-push`
+restores the old behaviour, and every row in `calibration_results.jsonl` records
+`push` so pre- and post-fix runs stay distinguishable.
+
+**Why it matters so much here.** For a thrust, uZ scales as slip x sin(dip) --
+at 5 deg that is 0.087 against 0.242 at 14 deg, so a shallow near-trench fault
+is nearly three times less efficient per metre of slip. The push term scales
+instead with horizontal displacement and bed slope, both of which *peak* at the
+trench, where the DEM reaches a 0.45 m/m gradient. The two terms are comparable
+in size: on the f = 0.90 source the push reaches 13.5 m against uZ's 19.8 m, and
+adds ~40% to displaced volume.
+
+The gain therefore scales with how shallow the source is -- which is the check
+that the sign and implementation are right:
+
+| source | fault depth range | DART without push | with push |
+|---|---|------|------|
+| KL 200 x 50 | 14-26 km | 1.87 | 1.98 (+6%) |
+| deterministic 400 x 150 | 5-41 km | 1.85 | 2.17 (+17%) |
+| split f = 0.5 | 5-15 km (shallow seg) | 0.86 | 1.12 (+30%) |
+| split f = 0.90, narrow | 2-9 km | 0.90 | 1.48 (+64%) |
+
+Monotonic in depth, as the physics requires.
+
+#### The best configuration found
+
+**Published parameters reproduce both gauges once the push term is in**, with
+nothing about the source fitted:
+
+```
+split fault, trench anchor (750290, 4181170) UTM 54N
+  shallow: 80 km wide at  5 deg, top 2 km  ->  2-9 km depth, 90% of the moment
+  deep   : 120 km wide at 15 deg           ->  9-40 km depth, 10%
+  length 400 km, sig_u 0.20, strike 195, rake 87
+  M0 = 5.3e22  (the gCMT moment, Mw 9.08 -- not a fitted value)
+friction n = 0.036, open DEM, DE_ader2
+```
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.033 | 1.87 | 0.92 | **1.63** | +0.39 | 3.38 | 69 |
+| **0.036** | **1.87** | **0.98** | **1.64** | **+0.11** | 3.34 | 70 |
+| 0.040 | 1.87 | 1.09 | 1.68 | &minus;0.24 | 3.32 | 70 |
+
+DART 1.87 m against 1.87 m observed, K 0.98 inside the guideline band, and
+**&kappa; 1.63-1.64 -- below the 1.66 floor** every earlier configuration hit.
+The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
+deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
+
+#### What this supersedes
+
+The push term scales with bed slope and horizontal displacement, so it
+systematically penalised shallow near-trench sources -- exactly the ones the
+tsunami literature favours -- while barely touching deep ones. Therefore:
+
+- **Every source-to-source comparison made before this is unsafe**, including
+  the *Sources* table, *Deterministic source* and *Split fault* verdicts below.
+  The controlled tests at *fixed* source are unaffected, because the missing
+  term cancels: *Flow algorithm*, *Mesh resolution*, *Friction*, *Coastal
+  defences*, and the solver/position/DEM eliminations.
+- **"The split fault is the physics winner and the fitting loser" is wrong.**
+  With the term restored it is the fitting winner as well.
+- **"&kappa; ~ 1.7 is a floor" is superseded**: 1.63 measured. The
+  scale-invariance theorem is untouched -- it is algebra, and it only ever said
+  that *amplitude* knobs cannot move &kappa;. This was a shape change, which the
+  theorem always permitted.
+- **The shipped KL pair is stale again.** `slip = 71` now gives DART 1.98 m.
+  Recalibrating `slip` for a third time is the argument for retiring it in
+  favour of `M0`, which is a physical quantity with a published value.
+
+One caveat on magnitude: the 450 m DEM under-resolves the trench slope, so the
+gradient -- and hence the term -- is a lower bound.
+
+
 ## Gotchas
 
 - **`iseed` in `run_Tohoku_okada.py` does not select the slip realisation.** Despite its comment, the top-level `iseed` only feeds the run name (`Okada_<iseed>` → `_output_Okada_<iseed>`); the actual KL draw is fixed by the hard-coded `iseed=1001` in the `okl.kl_deformation(...)` call. `setup_simulation.apply_deformation()` similarly hard-codes `iseed=1234`. Change both if you want a genuinely different realisation.
@@ -241,6 +638,31 @@ Fault-parameter sweeps (depth 9–20 km, width 50–120 km, length 200–500 km,
 - **Different scripts run different durations.** `run_Tohoku_okada.py` evolves 4 hours at a 5-minute yieldstep with `tide = -0.45`; `setup_simulation.evolve_domain()` evolves 2 hours at 2 minutes with `tide = 0.0`. Don't compare their outputs without accounting for this.
 - **`evolve_domain()` expects specific gauge keys** — it iterates `[21418, 0, 1, 2]`, so the `gauges` dict passed in must contain all four.
 - **ANUGA's default Manning friction is 0.0, and most scripts here never set it.** That was the single largest error in the model: with nothing dissipating the wave between the shelf break and the shore, *every* source tried — the KL plane, a two-segment KL source, and all five published inversions in `sources/` — over-predicted the surveyed inundation by roughly a factor of two once it was strong enough to match DART 21418. `notebook_tohoku_open_elevation.ipynb` now sets `domain.set_quantity('friction', 0.04)`, which takes Aida K from 0.55 to 1.08 and leaves the DART peak unchanged to 0.01 m (friction is negligible in 5700 m of water). Treat 0.04 as an effective value standing in for unresolved bed roughness and coastal defences on a 450 m DEM, not a measured one — and note the calibration is coupled to the source: at n = 0.04, `slip = 60` gives K = 1.08 while `slip = 35` under-predicts at K = 1.58.
+- **`nu` was silently ignored by the KL path, now fixed.** `kl_deformation()`
+  accepted a `nu` argument but the inner `okada.forward()` call hard-coded
+  `nu=0.25`, so changing it in a notebook did nothing. It is plumbed through
+  now. The value 0.25 (Poisson solid) remains the right default, so no
+  previously recorded result is affected.
+- **The KL slip field's `alpha` was 0.75 and produced negative slip.** `alpha`
+  in `kl_correlation_matrices` is the coefficient of variation (`sigma = alpha*mu`),
+  and the expansion is Gaussian with no positivity constraint. At 0.75 a
+  400 x 100 km / 10x10 draw gave slip from &minus;26.9 m to 100.5 m with **21 of
+  100 subfaults slipping backwards**, and dragged the realised mean from the
+  nominal 40 m down to 23.8 m. It is now **0.4**, the value at which negative
+  slip disappears (CoV 0.47, min 4.3 m, peak 72.3 m). Note this raises the
+  realised mean slip for a given nominal `slip`, so **the pre-existing KL
+  calibration at `slip = 84` no longer holds** — recalibrate stage 1 before
+  trusting a KL run. A second knob, `r0 = 0.2*width`, is the correlation
+  length; at width 100 km it is 20 km against 40 km along-strike subfaults, so
+  the field is nearly uncorrelated along strike. Longer `r0` smooths it but
+  *increases* the spread at fixed `alpha`, so tune the two together.
+  Recalibrated: the KL path now wants `slip = 71` with `friction = 0.038`
+  (was 84 / 0.033) — see *Notebook defaults*. `notebook_tohoku_open_elevation.ipynb`
+  carries the new pair. The other KL notebooks were **not** touched, because
+  the calibration is specific to the 200 x 50 km plane on the open DEM under
+  DE_ader2 and does not transfer to their geometry — but their sources are
+  still 1.32x stronger than before the fix, so any tuning done in them is
+  stale.
 - **The KL slip field had two bugs, now fixed — don't reintroduce them.** `kl_correlation_matrices` used `np.linalg.eig` on a symmetric covariance matrix; that is the general non-symmetric LAPACK routine, which may return complex-conjugate eigenpairs, and the complex values propagate through `sqrtD` into the slip field and `okada()`. **It depends on the numpy version, not the platform**: with `eig` restored, CI fails on numpy 2.5.2 under both OpenBLAS and Accelerate, and passes on numpy 2.4.6 under both (run 32253704090). It was first hit on macOS with Python 3.12, which made it look platform-specific; it is not. Use `np.linalg.eigh`, and clip eigenvalues at 0 before the sqrt. Separately, `sample='sobol'` fed raw Sobol points — uniform on [0,1) — into an expansion that wants standard normals, giving every mode a coefficient with mean 0.5 instead of 0; this inflated the slip field, which is why the KL source needed `slip = 60` to match DART while published inversions peak at 7–16 m of uplift. Both are covered by `tests/test_okada_kl.py`.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
