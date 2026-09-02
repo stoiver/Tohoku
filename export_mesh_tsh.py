@@ -12,6 +12,13 @@ actually use, so triangle indices line up with the cells in the `.sww` output.
 The georeference comes along by itself -- `set_epsg(32654)` puts zone 54 on the
 domain, and that is what gets written.
 
+**Prefer .msh unless you specifically need ASCII.**  Same mesh, but 11.4 MB
+against 24.8 MB (NetCDF binary rather than one text line per vertex and per
+triangle, the latter at full 16-digit float repr for a mesh whose cells are
+~250 m), ANUGA reads it natively, and it keeps the whole georeference where
+.tsh keeps only the zone.  Measured on this mesh: .tsh 24.8 MB, .tsh.gz 9.2,
+.tsh.xz 7.2, .msh 11.4, .msh.xz 5.2.  Just pass a .msh filename.
+
 Two things .tsh does not carry:
 
 * **The outline.**  Bounding polygon, interior regions, holes and max areas
@@ -22,8 +29,9 @@ Two things .tsh does not carry:
   values: zone, xllcorner, yllcorner.  Hemisphere, EPSG and false_easting have
   no slot, so the object read back reports `hemisphere='undefined'` -- and
   Geo_reference treats undefined as *southern*.  Set it explicitly on the way
-  back in (prefer `set_epsg`, see CLAUDE.md *Coordinate system*), or write
-  `.msh`, which is NetCDF and keeps the rest.
+  back in (prefer `set_epsg`, see CLAUDE.md *Coordinate system*).  A .msh of
+  this same mesh reads back as `(zone=54, ..., hemisphere=northern,
+  epsg=32654)` -- verified, not assumed.
 """
 import sys
 
