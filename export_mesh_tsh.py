@@ -33,6 +33,9 @@ Two things .tsh does not carry:
   this same mesh reads back as `(zone=54, ..., hemisphere=northern,
   epsg=32654)` -- verified, not assumed.
 """
+import gzip
+import os
+import shutil
 import sys
 
 import anuga
@@ -40,6 +43,14 @@ import anuga
 import project
 
 outfile = sys.argv[1] if len(sys.argv) > 1 else 'Tohoku_notebook_mesh.tsh'
+
+# A trailing .gz is handled here rather than by ANUGA: save_to_file() dispatches
+# on the last four characters, so it will not take 'x.tsh.gz'.  Write the plain
+# file, compress it, drop the original.  Note nothing in ANUGA reads .gz back --
+# gunzip first, or use .msh, which is smaller than .tsh.gz anyway and keeps the
+# full georeference.
+gz = outfile.endswith('.gz')
+inner = outfile[:-3] if gz else outfile
 
 # --- notebook_tohoku_open_elevation.ipynb, cell 10 -------------------------
 domain = anuga.create_domain_from_regions(
@@ -53,10 +64,20 @@ domain = anuga.create_domain_from_regions(
 domain.set_epsg(32654)  # WGS 84 / UTM zone 54N
 # ---------------------------------------------------------------------------
 
-domain.mesh.save_to_file(outfile)
+domain.mesh.save_to_file(inner)
 
-print(f'triangles : {len(domain)}')
-print(f'geo ref   : {domain.geo_reference}')
-print(f'wrote     : {outfile}')
+if gz:
+    with open(inner, 'rb') as fin, gzip.open(outfile, 'wb', compresslevel=9) as fout:
+        shutil.copyfileobj(fin, fout)
+    raw = os.path.getsize(inner)
+    os.remove(inner)
+    print(f'triangles : {len(domain)}')
+    print(f'geo ref   : {domain.geo_reference}')
+    print(f'wrote     : {outfile}  '
+          f'({os.path.getsize(outfile)/1e6:.1f} MB, from {raw/1e6:.1f} MB raw)')
+else:
+    print(f'triangles : {len(domain)}')
+    print(f'geo ref   : {domain.geo_reference}')
+    print(f'wrote     : {outfile}  ({os.path.getsize(outfile)/1e6:.1f} MB)')
 print('note: .tsh keeps the zone only -- hemisphere/EPSG are not persisted, '
       'and the outline section is empty')

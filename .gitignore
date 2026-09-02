@@ -7,6 +7,8 @@ __pycache__/
 *.sww
 *.msh
 *.tsh
+*.tsh.gz
+*.msh.gz
 anuga_*.log
 
 # Per-run and rendering output directories
