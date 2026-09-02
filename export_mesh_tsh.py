@@ -1,61 +1,54 @@
-"""Write the notebook mesh to ANUGA's ASCII .tsh format, georeferenced.
-
-The mesh is the one every entry point builds: notebook_tohoku_open_elevation.ipynb,
-setup_simulation.create_domain() and calibrate_deterministic.py all call
-create_domain_from_regions() with the polygons and resolutions in project.py, so
-this reproduces it exactly (354 946 triangles at rfact = 30).
+"""Export the mesh used by notebook_tohoku_open_elevation.ipynb to .tsh (or .msh).
 
     python export_mesh_tsh.py [outfile.tsh]
 
-The point of the script is the georeference.  Left to itself,
-create_mesh_from_regions() resolves the zone to DEFAULT_ZONE (-1, undefined)
-because no poly_geo_reference is supplied, and writes that into the file --
-the corner is right but nothing records that these are UTM 54N coordinates.
-Passing an explicit mesh_geo_reference puts the zone in.
+The domain is built with the notebook's own call -- same polygons, boundary tags,
+resolutions and `set_epsg(32654)` -- and the mesh is then pulled straight off it
+with `domain.mesh.save_to_file()`.  Going through the domain rather than calling
+create_mesh_from_regions() a second time matters: it is the mesh the runs
+actually use, so triangle indices line up with the cells in the `.sww` output.
+(`save_mesh_to_tsh()` does the same thing but is deprecated.)
 
-Note what .tsh *cannot* carry.  Geo_reference itself is fully capable here --
-its constructor takes `hemisphere` and `epsg`, and `epsg=32654` below derives
-the zone, the hemisphere and false_easting = 500000 together.  The loss is at
-*write* time: Geo_reference.write_ASCII emits exactly three values -- zone,
-xllcorner, yllcorner -- so the file keeps the zone and drops the rest, and the
-object read back reports hemisphere='undefined'.
+The georeference comes along by itself -- `set_epsg(32654)` puts zone 54 on the
+domain, and that is what gets written.
 
-That matters because Geo_reference defaults the hemisphere to *southern* when it
-is undefined, so a reader must set it explicitly; prefer `domain.set_epsg(32654)`
-over `set_zone`/`set_hemisphere` (see CLAUDE.md, *Coordinate system*).  Use .msh
-(NetCDF) if the full georeference has to survive the round trip.
+Two things .tsh does not carry:
+
+* **The outline.**  Bounding polygon, interior regions, holes and max areas
+  belong to the mesh generator, not the runtime mesh, so that section is empty
+  (see Mesh.save_to_file).  The file is a triangulation, not a re-generatable
+  recipe -- `project.py` remains the recipe.
+* **Anything but the zone.**  Geo_reference.write_ASCII emits exactly three
+  values: zone, xllcorner, yllcorner.  Hemisphere, EPSG and false_easting have
+  no slot, so the object read back reports `hemisphere='undefined'` -- and
+  Geo_reference treats undefined as *southern*.  Set it explicitly on the way
+  back in (prefer `set_epsg`, see CLAUDE.md *Coordinate system*), or write
+  `.msh`, which is NetCDF and keeps the rest.
 """
 import sys
 
-import numpy as np
+import anuga
 
 import project
-from anuga.coordinate_transforms.geo_reference import Geo_reference
-from anuga.pmesh.mesh_interface import create_mesh_from_regions
-
-EPSG = 32654                    # WGS 84 / UTM zone 54N
 
 outfile = sys.argv[1] if len(sys.argv) > 1 else 'Tohoku_notebook_mesh.tsh'
 
-# Same corner create_mesh_from_regions() would derive on its own -- the lower
-# left of the bounding polygon -- so only the georeferencing changes.  Passing
-# epsg fills in zone, hemisphere and false_easting; only the zone reaches the
-# file, but the object is right for anything else that reads it.
-poly = np.asarray(project.bounding_polygon)
-geo = Geo_reference(xllcorner=float(poly[:, 0].min()),
-                    yllcorner=float(poly[:, 1].min()),
-                    epsg=EPSG)
-
-create_mesh_from_regions(
+# --- notebook_tohoku_open_elevation.ipynb, cell 10 -------------------------
+domain = anuga.create_domain_from_regions(
     project.bounding_polygon,
     boundary_tags={'bottom': [0], 'ocean_east': [1], 'top': [2], 'onshore': [3]},
     maximum_triangle_area=project.res_whole,
     interior_regions=project.interior_regions,
-    mesh_geo_reference=geo,
-    filename=outfile,
     use_cache=False,
     verbose=False,
 )
+domain.set_epsg(32654)  # WGS 84 / UTM zone 54N
+# ---------------------------------------------------------------------------
 
-print(f'wrote {outfile}  ({geo})')
-print('note: .tsh stores zone only -- hemisphere and EPSG are not persisted')
+domain.mesh.save_to_file(outfile)
+
+print(f'triangles : {len(domain)}')
+print(f'geo ref   : {domain.geo_reference}')
+print(f'wrote     : {outfile}')
+print('note: .tsh keeps the zone only -- hemisphere/EPSG are not persisted, '
+      'and the outline section is empty')
