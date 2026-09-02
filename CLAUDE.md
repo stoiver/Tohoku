@@ -134,6 +134,8 @@ These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — s
 
 ### Best configuration found
 
+> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term — DART 1.87 m, K 0.98, κ 1.64. See *Horizontal push*. Everything in this subsection predates that term and is kept for the record.
+
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
 
 | run | DART | K | κ | bias | RMS | survey pts left dry |
@@ -150,7 +152,7 @@ The UCSB3 rows predate the KL fixes but are unaffected by them: those runs take 
 Two things to carry away:
 
 - **Friction and DEM are coupled — tune them together.** n = 0.04 is right for the 450 m open DEM and n = 0.05 for the 150 m `Tohoku.pts`: the finer bathymetry lets more water through, so it wants more roughness. Retuning n on the finer DEM moved K from 0.84 to 1.06 and the bias from +0.97 m to −0.04 m while costing only two extra dry points.
-- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** *(The mechanism is now known: κ is mathematically invariant under any uniform rescaling of the modelled heights, so no strength knob can move it — see* &kappa; *is scale-invariant, below.)* Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not — nor is it the solver (*Flow algorithm*), nor missing sea defences (*Coastal defences*), each tested and eliminated. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
+- **κ ≈ 1.7 is a floor, and it is *not* the mesh.** ***Superseded — κ = 1.63 is now reached; see* Horizontal push *below. The rest of this bullet stands for the pre-push runs.*** *(The mechanism is partly known: κ is mathematically invariant under any uniform rescaling of the modelled heights, so no strength knob can move it — see* &kappa; *is scale-invariant, below.)* Every configuration tried — three sources, two DEMs at 450 m and 150 m, friction from 0 to 0.05, one and two fault segments, before and after the KL fixes — bottoms out at κ = 1.67–1.73, and only ever goes *up* from there (to 2.0 at badly chosen friction). This was assumed to be discretisation until it was measured directly: see *Mesh resolution* below. It is not — nor is it the solver (*Flow algorithm*), nor missing sea defences (*Coastal defences*), each tested and eliminated. Do not expect a finer mesh to buy you the κ < 1.45 guideline target.
 
 ### Flow algorithm
 
@@ -434,6 +436,8 @@ satisfy DART and the survey simultaneously.**
 
 #### The unresolved tension
 
+> **Largely resolved.** The missing Tanioka & Satake horizontal-push term accounts for most of this gap — see *Horizontal push*. What follows is the state of the investigation before that was found, and the three eliminations in it remain valid.
+
 The f = 0.5 row is the important one. It is the **best coastal fit measured in
 this repo** — K 0.97, &kappa; 1.68, RMS 2.74, bias &minus;0.16 m, with *no
 friction retuning at all* — and it carries **46% of the required DART
@@ -532,6 +536,99 @@ derived for arrival time on the old 200 x 50 km plane and does not transfer to
 this geometry; the split source arrives 3 min early at the inherited position.
 Re-derive it per source rather than inheriting it, and record which of the two
 constraints it was set from.
+
+
+### Horizontal push (Tanioka & Satake)
+
+**`uE` and `uN` were computed by every source function and then discarded** --
+only `uZ` reached the domain. That is a missing forcing term, not a modelling
+choice, and restoring it resolves most of the coast/far-field mismatch recorded
+below.
+
+Where the sea bed slopes, horizontal motion displaces water. Moving the bed east
+by `uE` replaces the bed at a point with bed that was previously to the west, so
+the effective vertical change is
+
+```
+push = -(uE * dz/dx + uN * dz/dy)          # z = elevation, negative offshore
+stage += uZ + push                          # water surface
+elevation += uZ                             # the bed itself moves by uZ only
+```
+
+applied only where there is water (`elevation < 0`), from the **pre-earthquake**
+bathymetry (`elev_q.compute_gradients()` before the deformation is added).
+`calibrate_deterministic.py` does this by default; `--no-horizontal-push`
+restores the old behaviour, and every row in `calibration_results.jsonl` records
+`push` so pre- and post-fix runs stay distinguishable.
+
+**Why it matters so much here.** For a thrust, uZ scales as slip x sin(dip) --
+at 5 deg that is 0.087 against 0.242 at 14 deg, so a shallow near-trench fault
+is nearly three times less efficient per metre of slip. The push term scales
+instead with horizontal displacement and bed slope, both of which *peak* at the
+trench, where the DEM reaches a 0.45 m/m gradient. The two terms are comparable
+in size: on the f = 0.90 source the push reaches 13.5 m against uZ's 19.8 m, and
+adds ~40% to displaced volume.
+
+The gain therefore scales with how shallow the source is -- which is the check
+that the sign and implementation are right:
+
+| source | fault depth range | DART without push | with push |
+|---|---|------|------|
+| KL 200 x 50 | 14-26 km | 1.87 | 1.98 (+6%) |
+| deterministic 400 x 150 | 5-41 km | 1.85 | 2.17 (+17%) |
+| split f = 0.5 | 5-15 km (shallow seg) | 0.86 | 1.12 (+30%) |
+| split f = 0.90, narrow | 2-9 km | 0.90 | 1.48 (+64%) |
+
+Monotonic in depth, as the physics requires.
+
+#### The best configuration found
+
+**Published parameters reproduce both gauges once the push term is in**, with
+nothing about the source fitted:
+
+```
+split fault, trench anchor (750290, 4181170) UTM 54N
+  shallow: 80 km wide at  5 deg, top 2 km  ->  2-9 km depth, 90% of the moment
+  deep   : 120 km wide at 15 deg           ->  9-40 km depth, 10%
+  length 400 km, sig_u 0.20, strike 195, rake 87
+  M0 = 5.3e22  (the gCMT moment, Mw 9.08 -- not a fitted value)
+friction n = 0.036, open DEM, DE_ader2
+```
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.033 | 1.87 | 0.92 | **1.63** | +0.39 | 3.38 | 69 |
+| **0.036** | **1.87** | **0.98** | **1.64** | **+0.11** | 3.34 | 70 |
+| 0.040 | 1.87 | 1.09 | 1.68 | &minus;0.24 | 3.32 | 70 |
+
+DART 1.87 m against 1.87 m observed, K 0.98 inside the guideline band, and
+**&kappa; 1.63-1.64 -- below the 1.66 floor** every earlier configuration hit.
+The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
+deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
+
+#### What this supersedes
+
+The push term scales with bed slope and horizontal displacement, so it
+systematically penalised shallow near-trench sources -- exactly the ones the
+tsunami literature favours -- while barely touching deep ones. Therefore:
+
+- **Every source-to-source comparison made before this is unsafe**, including
+  the *Sources* table, *Deterministic source* and *Split fault* verdicts below.
+  The controlled tests at *fixed* source are unaffected, because the missing
+  term cancels: *Flow algorithm*, *Mesh resolution*, *Friction*, *Coastal
+  defences*, and the solver/position/DEM eliminations.
+- **"The split fault is the physics winner and the fitting loser" is wrong.**
+  With the term restored it is the fitting winner as well.
+- **"&kappa; ~ 1.7 is a floor" is superseded**: 1.63 measured. The
+  scale-invariance theorem is untouched -- it is algebra, and it only ever said
+  that *amplitude* knobs cannot move &kappa;. This was a shape change, which the
+  theorem always permitted.
+- **The shipped KL pair is stale again.** `slip = 71` now gives DART 1.98 m.
+  Recalibrating `slip` for a third time is the argument for retiring it in
+  favour of `M0`, which is a physical quantity with a published value.
+
+One caveat on magnitude: the 450 m DEM under-resolves the trench slope, so the
+gradient -- and hence the term -- is a lower bound.
 
 
 ## Gotchas

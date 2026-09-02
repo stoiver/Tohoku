@@ -20,6 +20,10 @@ md = 0.01
 p = argparse.ArgumentParser()
 p.add_argument('--flow-algorithm', default='DE_ader2')
 p.add_argument('--elevation-source', choices=['open', 'pts'], default='open')
+p.add_argument('--no-horizontal-push', dest='push', action='store_false',
+               help='drop the Tanioka & Satake (1996) horizontal-push term '
+                    '(what every run before 2026-09 did)')
+p.set_defaults(push=True)
 p.add_argument('--source', choices=['det', 'kl', 'split'], default='det')
 p.add_argument('--split-frac', type=float, default=0.6)   # moment fraction, shallow segment
 p.add_argument('--dip1', type=float, default=8.0)
@@ -124,8 +128,27 @@ else:
         strike=195.0, dip=14.0, rake=87.0, nu=0.25,
         slip=a.slip, opening=0.0)
 
+# Tanioka & Satake (1996): where the sea bed slopes, horizontal motion
+# displaces water too.  Moving the bed east by uE replaces the bed at a point
+# with bed that was previously to the west, so the effective vertical change is
+# -uE*dz/dx - uN*dz/dy on top of uZ.  The term scales with horizontal
+# displacement and bathymetric slope, so it is largest for shallow near-trench
+# slip -- exactly where uZ (which scales as slip*sin(dip)) is weakest.  It is
+# applied to the water surface only: the sea bed itself moves by uZ.
+if a.push:
+    elev_q = domain.quantities['elevation']
+    elev_q.compute_gradients()                 # pre-earthquake bathymetry
+    dzdx = elev_q.x_gradient
+    dzdy = elev_q.y_gradient
+    push = -(uE*dzdx + uN*dzdy)
+    push = np.where(Elevation < 0.0, push, 0.0)   # only where there is water
+    print(f'horizontal push: {push.min():.2f} .. {push.max():.2f} m '
+          f'(uZ {uZ.min():.2f} .. {uZ.max():.2f})')
+else:
+    push = 0.0
+
 Elevation[:] += uZ
-Stage[:]     += uZ
+Stage[:]     += uZ + push
 if a.source == 'split':
     Mw = (np.log10(a.M0) - 9.1)/1.5
 else:
@@ -181,7 +204,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, algorithm=a.flow_algorithm, dem=a.elevation_source, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, push=bool(a.push), algorithm=a.flow_algorithm, dem=a.elevation_source, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),
