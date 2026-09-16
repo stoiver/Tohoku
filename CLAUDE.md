@@ -603,6 +603,32 @@ friction n = 0.036, open DEM, DE_ader2
 
 DART 1.87 m against 1.87 m observed, K 0.98 inside the guideline band, and
 **&kappa; 1.63-1.64 -- below the 1.66 floor** every earlier configuration hit.
+
+**Scoring criterion.** Every figure in this file, and every row in
+`calibration_results.jsonl`, matches a survey mark to the nearest cell wet to
+**0.01 m within 1500 m**. That is far too loose for validation: a cell wet to a
+centimetre has a `max_stage` that is essentially its own ground elevation (on
+this run, a median of 0.03 m above its own bed), so a survey point with no real
+inundation nearby gets the DEM's land height reported as a modelled inundation
+height. It shows up as flat lines of constant modelled height on the
+point-by-point scatter, and a tenth of the paired points were matching a cell
+more than 500 m away on a ~250 m mesh.
+
+`notebook_tohoku_open_elevation.ipynb` now uses **0.10 m within 500 m**
+(`inundation_depth` / `match_radius` in the validation cell). For the shipped
+configuration at n = 0.036 the two criteria give:
+
+| criterion | K | &kappa; | bias | RMS | paired | dry |
+|---|------|------|-------|------|------|-----|
+| loose (0.01 m, 1500 m) -- everything else in this file | 0.98 | 1.64 | +0.11 | 3.34 | 1658 | 70 |
+| **strict (0.10 m, 500 m) -- the notebook** | **0.97** | **1.56** | **+0.04** | 3.22 | 1483 | **258** |
+
+The model did not change: 188 points moved out of the comparison and into the
+`dry` count, which is where they belong. Part of the &kappa; floor was the
+search radius rather than model error. **`calibrate_deterministic.py` still
+uses the loose criterion**, so the 40-run record stays internally consistent --
+but driver and notebook numbers are no longer directly comparable, and any new
+comparison must state which criterion it used.
 The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
 deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
 
