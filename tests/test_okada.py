@@ -101,3 +101,26 @@ def test_subfaults_sum_matches_a_single_fault():
     np.testing.assert_allclose(uz_s, uz, rtol=1e-8, atol=1e-9)
     np.testing.assert_allclose(ue_s, ue, rtol=1e-8, atol=1e-9)
     np.testing.assert_allclose(un_s, un, rtol=1e-8, atol=1e-9)
+
+
+@pytest.mark.parametrize('params', [
+    THRUST,
+    dict(THRUST, rake=87.0),                                   # the notebooks' rake
+    dict(depth=5 * KM, length=30 * KM, width=10 * KM, strike=40.0, dip=60.0,
+         rake=-30.0, slip=3.0, opening=1.5, nu=0.25),          # every term live
+    dict(depth=8 * KM, length=30 * KM, width=10 * KM, strike=0.0, dip=90.0,
+         rake=0.0, slip=2.0, opening=1.0, nu=0.25),            # vertical-fault branch
+    dict(depth=1 * KM, length=1 * KM, width=1 * KM, strike=0.0, dip=0.0,
+         rake=0.0, slip=0.0, opening=10.0, nu=0.25),           # pure opening
+])
+def test_forward_matches_reference_transcription(params):
+    """forward() is a fused rewrite of forward_reference(), the line-by-line
+    port of okada85.m.  They must agree to rounding everywhere, including on
+    the grid lines through the origin, where xi or q can be exactly zero and
+    the special-case branches fire."""
+    x, y = grid(half_width=100 * KM, n=81)
+    for fast, ref in zip(okada.forward(x, y, **params),
+                         okada.forward_reference(x, y, **params)):
+        assert np.isfinite(fast).all()
+        np.testing.assert_allclose(fast, ref, rtol=1e-10,
+                                   atol=1e-12 * np.abs(ref).max())

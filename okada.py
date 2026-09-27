@@ -42,13 +42,18 @@ eps = 1e-14 #
 # Match input variable order as closely as possible
 #def calc_mogi(x,y,xoff=0,yoff=0,d=3e3,dV=1e6,nu=0.25,output='cyl'):
 #def forward(E,N,DEPTH,STRIKE,DIP,LENGTH,WIDTH,RAKE,SLIP,OPEN):
-def forward(x, y, xoff=0, yoff=0,
+def forward_reference(x, y, xoff=0, yoff=0,
             depth=5e3, length=1e3, width=1e3, 
             slip=0.0, opening=10.0, 
             strike=0.0, dip=0.0, rake=0.0,
             nu=0.25):
     '''
-    Calculate surface displacements for Okada85 dislocation model
+    Calculate surface displacements for Okada85 dislocation model.
+
+    The original line-by-line transcription of okada85.m, kept as the
+    reference that forward() is tested against.  It evaluates every one of
+    the 36 corner terms separately and recomputes the shared intermediates
+    (R, the logs, the arctans, I1-I5) for each, so it is ~5x slower.
     '''
 
     x = x - xoff
@@ -92,6 +97,130 @@ def forward(x, y, xoff=0, yoff=0,
     un = np.cos(strike) * ux + np.sin(strike) * uy
 
     return ue,un,uz
+
+
+def forward(x, y, xoff=0, yoff=0,
+            depth=5e3, length=1e3, width=1e3,
+            slip=0.0, opening=10.0,
+            strike=0.0, dip=0.0, rake=0.0,
+            nu=0.25):
+    '''
+    Calculate surface displacements for Okada85 dislocation model.
+
+    Same arguments and results as forward_reference(), to rounding.  Faster
+    because each of the four Chinnery corners is evaluated in one pass that
+    computes R, the logs, the arctan and I1-I5 once and combines the
+    strike-slip, dip-slip and tensile terms as it goes, and because a term
+    whose dislocation is exactly zero (opening = 0, the usual case) is not
+    computed at all.
+    '''
+    x = np.asarray(x, dtype=float) - xoff
+    y = np.asarray(y, dtype=float) - yoff
+
+    strike = np.deg2rad(strike)
+    dip = np.deg2rad(dip)
+    rake = np.deg2rad(rake)
+
+    L = length
+    W = width
+
+    U1 = np.cos(rake) * slip
+    U2 = np.sin(rake) * slip
+    U3 = opening
+
+    sd, cd = np.sin(dip), np.cos(dip)
+    ss_, cs_ = np.sin(strike), np.cos(strike)
+
+    d = depth + sd * W / 2
+    ec = x + cs_ * cd * W / 2
+    nc = y - ss_ * cd * W / 2
+    xx = cs_ * nc + ss_ * ec + L / 2
+    yy = ss_ * nc - cs_ * ec + cd * W
+    p = yy * cd + d * sd
+    q = yy * sd - d * cd
+
+    ux = np.zeros_like(xx)
+    uy = np.zeros_like(xx)
+    uz = np.zeros_like(xx)
+    for xi, eta, sign in ((xx, p, 1.0), (xx, p - W, -1.0),
+                          (xx - L, p, -1.0), (xx - L, p - W, 1.0)):
+        cx, cy, cz = _corner(xi, eta, q, sd, cd, nu, U1, U2, U3)
+        ux += sign * cx
+        uy += sign * cy
+        uz += sign * cz
+
+    # Okada's -U1, -U2, +U3 sign convention is folded into _corner().
+    ux /= 2 * np.pi
+    uy /= 2 * np.pi
+    uz /= 2 * np.pi
+
+    ue = ss_ * ux - cs_ * uy
+    un = cs_ * ux + ss_ * uy
+
+    return ue, un, uz
+
+
+def _corner(xi, eta, q, sd, cd, nu, U1, U2, U3):
+    '''One Chinnery corner of -U1*f_ss - U2*f_ds + U3*f_tf, for f = ux, uy, uz.
+
+    Equations (25)-(30) of Okada (1985), matching the ux_ss ... I5 functions
+    below term for term, including their special cases: the arctan term is
+    dropped where q == 0, I5 is zero where xi == 0, and cos(dip) <= eps takes
+    the vertical-fault forms of I1-I5.
+    '''
+    R = np.sqrt(xi ** 2 + eta ** 2 + q ** 2)
+    db = eta * sd - q * cd
+    yb = eta * cd + q * sd
+    Reta = R + eta
+    Rdb = R + db
+    ln_Reta = np.log(Reta)
+    a = 1 - 2 * nu
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        atn = np.where(q != 0, np.arctan((xi * eta) / (q * R)), 0.0)
+
+        if cd > eps:
+            X = np.sqrt(xi ** 2 + q ** 2)
+            I5 = np.where(xi != 0,
+                          a * 2 / cd * np.arctan(
+                              (eta * (X + q * cd) + X * (R + X) * sd)
+                              / (xi * (R + X) * cd)),
+                          0.0)
+            I4 = a / cd * (np.log(Rdb) - sd * ln_Reta)
+            I3 = a * (yb / (cd * Rdb) - ln_Reta) + sd / cd * I4
+            I1 = a * (-xi / (cd * Rdb)) - sd / cd * I5
+        else:
+            I5 = -a * xi * sd / Rdb
+            I4 = -a * q / Rdb
+            I3 = a / 2 * (eta / Rdb + yb * q / Rdb ** 2 - ln_Reta)
+            I1 = -a / 2 * xi * q / Rdb ** 2
+
+    ux = np.zeros_like(R)
+    uy = np.zeros_like(R)
+    uz = np.zeros_like(R)
+
+    R_Reta = R * Reta
+    if U1 != 0:
+        I2 = a * (-ln_Reta) - I3
+        ux -= U1 * (xi * q / R_Reta + I1 * sd + atn)
+        uy -= U1 * (yb * q / R_Reta + q * cd / Reta + I2 * sd)
+        uz -= U1 * (db * q / R_Reta + q * sd / Reta + I4 * sd)
+
+    if U2 != 0 or U3 != 0:
+        R_Rxi = R * (R + xi)
+    if U2 != 0:
+        ux -= U2 * (q / R - I3 * sd * cd)
+        uy -= U2 * (yb * q / R_Rxi - I1 * sd * cd + cd * atn)
+        uz -= U2 * (db * q / R_Rxi - I5 * sd * cd + sd * atn)
+
+    if U3 != 0:
+        ux += U3 * (q ** 2 / R_Reta - I3 * sd ** 2)
+        uy += U3 * (-db * q / R_Rxi - sd * xi * q / R_Reta - I1 * sd ** 2
+                    + sd * atn)
+        uz += U3 * (yb * q / R_Rxi + cd * xi * q / R_Reta - I5 * sd ** 2
+                    - cd * atn)
+
+    return ux, uy, uz
 
 '''
 % Notes for I... and K... subfunctions:

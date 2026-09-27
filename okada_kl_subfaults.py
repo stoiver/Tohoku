@@ -1,4 +1,7 @@
 
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import okada
 import numpy as np
 verbose = False
@@ -61,38 +64,34 @@ def sum_subfault_deformation(x, y, slips, xoff=0, yoff=0,
 
     epicenters_E, epicenters_N, epicenters_D = subfaults(E_subfault, N_subfault, dip, strike, length, width)
 
-    openings = opening*np.ones_like(epicenters_E)
-
-    # initialise the value of the sum of the displacement of each subfaults
-    uE_sum = np.zeros_like(x)
-    uN_sum = np.zeros_like(x)
-    uZ_sum = np.zeros_like(x)
-
     # the length and width of subfaults
     length_E = width/E_subfault
     length_N = length/N_subfault
 
-    # calculate the sum of displacements of subfaults
-    for i in range(N_subfault):
+    def row(i):
+        """Displacement summed over the subfaults in along-strike row i."""
+        u = [np.zeros_like(x, dtype=float) for _ in range(3)]
         for j in range(E_subfault):
-            x_convert = x-epicenters_E[i,j]
-            y_convert = y-epicenters_N[i,j]
-            d_convert = depth-epicenters_D[i,j]
+            if slips[i, j] == 0.0 and opening == 0.0:
+                continue
+            for acc, comp in zip(u, okada.forward(
+                    x=x - epicenters_E[i, j], y=y - epicenters_N[i, j],
+                    xoff=xoff, yoff=yoff,
+                    depth=depth - epicenters_D[i, j],
+                    length=length_N, width=length_E,
+                    slip=slips[i, j], opening=opening,
+                    strike=strike, dip=dip, rake=rake, nu=nu)):
+                acc += comp
+        return u
 
-            slipij    = slips[i,j]
-            openingij = openings[i,j]
+    # Rows run in threads: numpy releases the GIL inside its ufuncs, and each
+    # okada.forward() call is a few dozen whole-array operations, so this
+    # scales with cores.  Each row is summed serially and the rows are added
+    # in order, so the result does not depend on the thread count.
+    with ThreadPoolExecutor(max_workers=min(N_subfault, os.cpu_count() or 1)) as pool:
+        rows = list(pool.map(row, range(N_subfault)))
 
-            params = dict(x=x_convert, y=y_convert, xoff=xoff, yoff=yoff,
-                          depth=d_convert, length=length_N, width=length_E,
-                          slip=slipij, opening=openingij,
-                          strike=strike, dip=dip, rake=rake,
-                          nu=nu)
-
-            uE,uN,uZ = okada.forward(**params)
-
-            uE_sum = uE_sum+uE
-            uN_sum = uN_sum+uN
-            uZ_sum = uZ_sum+uZ
+    uE_sum, uN_sum, uZ_sum = (sum(r[k] for r in rows) for k in range(3))
 
     return uE_sum, uN_sum, uZ_sum
 
@@ -245,10 +244,9 @@ def kl_correlation_matrices(epicenters_E, epicenters_N, epicenters_D, length, wi
     sigma=alpha*mu
     r0=0.2*width
 
-    for i in range(N):
-        for j in range(N):
-            K = sqrt((vector_E[i]-vector_E[j])**2 + (vector_N[i]-vector_N[j])**2 + (vector_D[i]-vector_D[j])**2)
-            C_hat[i,j] = sigma**2 * exp(-K/r0)
+    P = np.column_stack([vector_E, vector_N, vector_D])
+    K = np.sqrt(((P[:, None, :] - P[None, :, :])**2).sum(axis=-1))
+    C_hat[:, :] = sigma**2 * np.exp(-K/r0)
 
     #print(C_hat)
 
