@@ -42,6 +42,8 @@ jupyter notebook notebook_tohoku_source_example.ipynb
 **Key notebooks:**
 - `notebook_tohoku_source_example.ipynb` — end-to-end simulation with KL slip field, driven by `setup_simulation.py`
 - `notebook_tohoku_open_elevation.ipynb` — same simulation but with the freely downloadable NOAA DEM in place of `Tohoku.pts` (see *Open elevation data*); the only fully reproducible path without the proprietary data
+- `notebook_tohoku_friction_calibration.ipynb` — Manning *n* sweep on both DEMs for the shipped split-fault source, scored with the strict criterion; drives `calibrate_deterministic.py` and skips runs whose `calib_fric_*.sww` already exists
+- `notebook_tohoku_mesh.ipynb` — the mesh on its own, no run: lat/lon extents of the domain, refinement polygons and map boxes, triangle count per refinement region, and the mesh over the study area / Sendai with the coastline
 - `notebook_tohoku_okada_example.ipynb` — Okada source model example
 - `notebook_tohoku_okada_kl_example.ipynb` — Okada + KL slip field
 - `notebook_random_slipfields.ipynb` / `notebook_okada_kl_test.ipynb` — KL slip-field generation and testing in isolation (no ANUGA run)
@@ -83,6 +85,8 @@ Central config module imported by all simulation scripts. There is no CLI or con
 | `tsunami_observations.py` | Loads the TTJS surveyed inundation/run-up heights for validation; subsetting by UTM extent or by gauge |
 
 ### Coordinate system
+Map and validation boxes are defined in degrees in `project.py` — `study_extent_ll = [140.70, 141.90, 37.50, 38.65]` and `sendai_extent_ll = [140.82, 141.36, 38.03, 38.42]`, `[lon_min, lon_max, lat_min, lat_max]` — and survey points are subset with `tsunami_observations.in_extent_ll`. They replace the UTM boxes `[475 000, 580 000, 4 150 000, 4 280 000]` and `[484 000, 531 500, 4 209 000, 4 252 500]`, and select 1765 rather than 1768 survey points in the study area. The notebook maps stay in the UTM plane (`ccrs.UTM(zone=54)`) and are framed with `set_extent(extent_ll, crs=ccrs.PlateCarree())`. Their gridlines are lat/lon either way. `calibrate_deterministic.py` still scores on the old UTM box.
+
 All simulations use **UTM Zone 54N**, set with `domain.set_epsg(32654)`. This replaced the older `domain.set_hemisphere('northern')` + `domain.set_zone(54)` pair — use `set_epsg` in new code. The two are equivalent for zone/hemisphere/EPSG, with one difference: `set_epsg` also populates `false_easting` from pyproj (0 → 500000, the correct UTM value), which is metadata written into `.sww` and surfaces as `Xshift` in `.prj` files produced by `sww2dem` (used by `ExportResults.py`). Note the ordering rule if you ever go back to the old calls — `set_zone` defaults the hemisphere to *southern* when it is still undefined, so `set_hemisphere` must come first.
 
 ANUGA stores centroid coordinates *relative* to the domain lower-left corner, so anything expressed in absolute UTM (fault epicentre, gauge positions) must be offset by `domain.geo_reference.xllcorner`/`yllcorner` before use — this is what `setup_simulation.apply_deformation()` does with `xoff`/`yoff`. Gauge lat/lon is converted with `utm.from_latlon(..., force_zone_number=54)`.
@@ -631,6 +635,17 @@ but driver and notebook numbers are no longer directly comparable, and any new
 comparison must state which criterion it used.
 The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
 deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
+
+#### Friction per DEM
+
+`notebook_tohoku_open_elevation.ipynb` now picks *n* from `elevation_source`: **open 0.037, pts 0.042**. Both are the K = 1 points of the sweep in `notebook_tohoku_friction_calibration.ipynb` (strict criterion, `project.study_extent_ll`, 1765 points):
+
+| DEM | n | K | &kappa; | bias | RMS | dry |
+|---|------|------|------|-------|------|-----|
+| open | 0.037 | 1.00 | 1.57 | &minus;0.09 | 3.23 | 263 |
+| pts | 0.042 | 1.00 | 1.59 | &minus;0.04 | 3.75 | 147 |
+
+Under the strict criterion **K and &kappa; co-optimise on both DEMs** (&kappa; minimum at 0.035 open, 0.040 pts), unlike under the loose one. The DART peak is flat in *n* on each DEM, but differs between them (1.874 m open, 1.850 m pts).
 
 #### What this supersedes
 

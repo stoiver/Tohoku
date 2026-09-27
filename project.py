@@ -93,3 +93,15 @@ print ('source directory: %s'%source_file)
 
 
 lores_cellsize = 20000
+
+#------------------------------------------------------------------------------
+# Map and validation boxes, [lon_min, lon_max, lat_min, lat_max] in degrees
+# (WGS 84).  These replace the UTM 54N boxes the notebooks used to carry,
+#   study  [475 000, 580 000, 4 150 000, 4 280 000]
+#   sendai [484 000, 531 500, 4 209 000, 4 252 500]
+# rounded to the nearest 0.01 deg of those boxes' lat/lon bounds.  A lat/lon
+# rectangle is not a UTM rectangle, so the survey subsets differ by a handful
+# of points: 1765 against 1768 in the study box.
+#------------------------------------------------------------------------------
+study_extent_ll  = [140.70, 141.90, 37.50, 38.65]   # Tohoku inundation close-up
+sendai_extent_ll = [140.82, 141.36, 38.03, 38.42]   # Sendai plain

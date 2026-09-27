@@ -126,6 +126,15 @@ def in_extent(obs, extent):
     return {k: v[m] for k, v in obs.items()}
 
 
+def in_extent_ll(obs, extent):
+    """Subset `obs` to a lon/lat extent [lon_min, lon_max, lat_min, lat_max]
+    in degrees, e.g. `project.study_extent_ll`."""
+    lon_min, lon_max, lat_min, lat_max = extent
+    m = ((obs['lon'] >= lon_min) & (obs['lon'] <= lon_max) &
+         (obs['lat'] >= lat_min) & (obs['lat'] <= lat_max))
+    return {k: v[m] for k, v in obs.items()}
+
+
 def near(obs, gauge, radius=3000.0):
     """Subset `obs` to points within `radius` metres of a Gauge (anything with
     .east/.north), nearest first."""
