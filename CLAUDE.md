@@ -138,7 +138,7 @@ These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — s
 
 ### Best configuration found
 
-> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term — DART 1.87 m, K 0.98, κ 1.64. See *Horizontal push*. Everything in this subsection predates that term and is kept for the record.
+> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term — DART 1.87 m, K 0.98, κ 1.64. See *Horizontal push*. Everything in this subsection predates that term and is kept for the record. The UCSB3 row is also superseded by *UCSB3 at beta 1.0*.
 
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
 
@@ -636,16 +636,44 @@ comparison must state which criterion it used.
 The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
 deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
 
-#### Friction per DEM
+#### Recalibration at DE_ader2 beta 1.0 (current)
 
-`notebook_tohoku_open_elevation.ipynb` now picks *n* from `elevation_source`: **open 0.037, pts 0.042**. Both are the K = 1 points of the sweep in `notebook_tohoku_friction_calibration.ipynb` (strict criterion, `project.study_extent_ll`, 1765 points):
+ANUGA commit `1e6a7c1f` (2026-09-29) changed `DE_ader2`'s default limiter beta from 0.5 to 1.0 -- at 0.5 it kept only 32% of a propagating wave's amplitude on ANUGA's `deep_wave` test. **Everything calibrated in this file before 2026-09-30 ran at beta 0.5**, so it was tuned against that numerical damping. Same configuration on current ANUGA (open DEM, n = 0.037, gCMT moment; loose criterion):
+
+| beta | DART | K | &kappa; | max wet stage |
+|------|------|------|------|------|
+| 0.5 | 1.87 | 1.01 | 1.65 | 36 m |
+| 1.0 | 2.12 | 0.75 | 1.66 | 72 m |
+
+Beta 0.5 reproduces the old numbers exactly, so the other half of that commit (Manning drag in the ADER predictor) has no measurable effect here. `calibrate_deterministic.py --beta` overrides the wet betas; each jsonl row records `beta`.
+
+Recalibrated at beta 1.0, pinned in the notebook with `domain.set_betas(1.0, 0.0, 1.0, 0.0, 1.0, 0.0)`:
+
+1. **M0 = 4.7e22 (Mw 9.05)** from DART: 1.880 m on the open DEM, 1.854 m on `pts`. The moment is now fitted -- 11% below gCMT, inside the published Mw 9.0-9.1 range and well within the uncertainty of the 40 GPa rigidity that converts slip to moment. Peak slip 87 m.
+2. **Friction per DEM**, from `notebook_tohoku_friction_calibration.ipynb` (strict criterion, `project.study_extent_ll`, 1765 points):
 
 | DEM | n | K | &kappa; | bias | RMS | dry |
 |---|------|------|------|-------|------|-----|
-| open | 0.037 | 1.00 | 1.57 | &minus;0.09 | 3.23 | 263 |
-| pts | 0.042 | 1.00 | 1.59 | &minus;0.04 | 3.75 | 147 |
+| open | 0.045 | 1.00 | 1.59 | +0.25 | 4.31 | 279 |
+| pts | 0.048 | 0.99 | 1.60 | +0.38 | 4.68 | 161 |
 
-Under the strict criterion **K and &kappa; co-optimise on both DEMs** (&kappa; minimum at 0.035 open, 0.040 pts), unlike under the loose one. The DART peak is flat in *n* on each DEM, but differs between them (1.874 m open, 1.850 m pts).
+Against beta 0.5 (open 0.037 / pts 0.042, &kappa; 1.57 / 1.59, RMS 3.23 / 3.75): friction rises ~0.007 on both DEMs, &kappa; is essentially unchanged, and **RMS is ~1 m worse** -- the largest run-up heights are over-predicted by more, which RMS weights and &kappa; does not. K and &kappa; still co-optimise (&kappa; minimum at n = 0.040 open, 0.045 pts). The beta 0.5 sweep is kept as `calib_fric_<dem>_n*.sww`; the beta 1.0 one is `calib_fric_beta1.0_M4.7_<dem>_n*.sww`.
+
+#### UCSB3 at beta 1.0
+
+`calibrate_deterministic.py --source pts --scenario UCSB3` runs a published inversion from `sources/<scenario>.pts`: linearly interpolated onto the mesh, zero outside its coverage, added to stage and elevation. Vertical only, so no horizontal push. At beta 0.5 it reproduces the earlier UCSB3 + `pts` + n = 0.05 run (DART 1.81, K 1.09 against 1.07 recorded; κ 1.73 against 1.66, loose criterion) -- the κ gap is probably a different source interpolation in the unrecorded original script.
+
+At beta 1.0 on `Tohoku.pts`, strict criterion:
+
+| n | DART | K | &kappa; | bias | RMS | dry |
+|-------|------|------|------|-------|------|-----|
+| 0.045 | 2.02 | 0.83 | 1.69 | +1.66 | 5.39 | 74 |
+| 0.050 | 2.02 | 0.95 | 1.76 | +1.06 | 5.22 | 108 |
+| 0.055 | 2.02 | 1.09 | 1.83 | +0.48 | 5.11 | 143 |
+| 0.060 | 2.02 | 1.22 | 1.89 | &minus;0.01 | 5.11 | 211 |
+| 0.065 | 2.02 | 1.35 | 1.68 | &minus;0.49 | 5.17 | 280 |
+
+K = 1 at **n &asymp; 0.052**: &kappa; ~1.79, bias ~+0.8 m, RMS ~5.2, ~120 dry. **UCSB3 is no longer the best configuration.** Against the split fault at n = 0.048 on the same DEM (K 0.99, &kappa; 1.60, RMS 4.68, 161 dry, DART 1.85) it loses on &kappa;, RMS and DART -- its fixed deformation now overshoots DART 21418 by 8% and has no moment knob to correct it -- and wins only on inundation extent. The &kappa; dip at n = 0.065 (1.89 -> 1.68 -> 1.75) breaks the trend and is unexplained; left in, not smoothed.
 
 #### What this supersedes
 
@@ -705,6 +733,8 @@ gradient -- and hence the term -- is a lower bound.
   still 1.32x stronger than before the fix, so any tuning done in them is
   stale.
 - **The KL slip field had two bugs, now fixed — don't reintroduce them.** `kl_correlation_matrices` used `np.linalg.eig` on a symmetric covariance matrix; that is the general non-symmetric LAPACK routine, which may return complex-conjugate eigenpairs, and the complex values propagate through `sqrtD` into the slip field and `okada()`. **It depends on the numpy version, not the platform**: with `eig` restored, CI fails on numpy 2.5.2 under both OpenBLAS and Accelerate, and passes on numpy 2.4.6 under both (run 32253704090). It was first hit on macOS with Python 3.12, which made it look platform-specific; it is not. Use `np.linalg.eigh`, and clip eigenvalues at 0 before the sqrt. Separately, `sample='sobol'` fed raw Sobol points — uniform on [0,1) — into an expansion that wants standard normals, giving every mode a coefficient with mean 0.5 instead of 0; this inflated the slip field, which is why the KL source needed `slip = 60` to match DART while published inversions peak at 7–16 m of uplift. Both are covered by `tests/test_okada_kl.py`.
+- **ANUGA runs are CPU unless GPU offload is switched on.** `set_compute_mode('unified')` selects the unified kernels, which run CPU-multicore unless `anuga.set_gpu_offload(True)` is called before the first domain is built. `calibrate_deterministic.py` does this by default (`--cpu` opts out) and `notebook_tohoku_open_elevation.ipynb` does it in the domain cell, both with `strict=True`. A run takes ~60 s on the GPU.
+- **Pin the limiter beta.** ANUGA changed `DE_ader2`'s default from 0.5 to 1.0 on 2026-09-29, which moved DART 13% and K from 1.01 to 0.75 overnight with no change in this repo -- see *Recalibration at DE_ader2 beta 1.0*. The notebook now sets it explicitly; do the same in any new script.
 - **Generated artefacts are gitignored, input data is not.** `.gitignore` covers `*.sww`, `*.msh`, `anuga_*.log`, `_output_*/`, `_plot/`, `screenshots/`, `*.tif`, `*.georef` and the `tohoku_open_dem*.jpg` basemaps. It deliberately does **not** ignore `*.pts` — `Tohoku.pts` and `sources/*.pts` are tracked inputs. Don't add `*.pts` to it.
 
 ## Dependencies

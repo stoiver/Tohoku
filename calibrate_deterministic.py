@@ -19,12 +19,20 @@ md = 0.01
 
 p = argparse.ArgumentParser()
 p.add_argument('--flow-algorithm', default='DE_ader2')
+p.add_argument('--cpu', dest='gpu', action='store_false',
+               help='run the unified kernels CPU-multicore instead of offloading to the GPU')
+p.set_defaults(gpu=True)
+p.add_argument('--beta', type=float, default=None,
+               help='override the wet limiter betas (w, uh, vh); dry betas stay 0. '
+                    'DE_ader2 defaulted to 0.5 until ANUGA 1e6a7c1f (2026-09-29), 1.0 since')
 p.add_argument('--elevation-source', choices=['open', 'pts'], default='open')
 p.add_argument('--no-horizontal-push', dest='push', action='store_false',
                help='drop the Tanioka & Satake (1996) horizontal-push term '
                     '(what every run before 2026-09 did)')
 p.set_defaults(push=True)
-p.add_argument('--source', choices=['det', 'kl', 'split'], default='det')
+p.add_argument('--source', choices=['det', 'kl', 'split', 'pts'], default='det')
+p.add_argument('--scenario', default='UCSB3',
+               help="pts only: reads sources/<scenario>.pts (Caltech, Fujii, Ammon, Hayes, UCSB3)")
 p.add_argument('--split-frac', type=float, default=0.6)   # moment fraction, shallow segment
 p.add_argument('--dip1', type=float, default=8.0)
 p.add_argument('--width1', type=float, default=75000.0)
@@ -50,6 +58,12 @@ p.add_argument('--tag', default='det')
 p.add_argument('--results', default='calibration_results.jsonl')
 a = p.parse_args()
 
+# 'unified' compute mode runs CPU-multicore unless GPU offload is switched on
+# process-wide, before the first domain is built.  strict: a GPU run that
+# silently falls back to the CPU is the expensive failure in a sweep.
+if a.gpu:
+    anuga.set_gpu_offload(True, verbose=True, strict=True)
+
 t_start = time.time()
 
 domain = anuga.create_domain_from_regions(
@@ -60,6 +74,8 @@ domain = anuga.create_domain_from_regions(
     use_cache=False, verbose=False)
 
 domain.set_flow_algorithm(a.flow_algorithm)
+if a.beta is not None:
+    domain.set_betas(a.beta, 0.0, a.beta, 0.0, a.beta, 0.0)
 domain.set_epsg(32654)
 domain.set_collect_max_quantities()
 domain.set_compute_mode('unified')
@@ -120,6 +136,23 @@ elif a.source == 'split':
     uE, uN, uZ, slips_list = okl.split_fault_deformation(
         x, y, a.xt - xll, a.yt - yll, segs, length=a.length)
     slips = np.concatenate([s_.ravel() for s_ in slips_list])
+elif a.source == 'pts':
+    # A published inversion's sea-bed deformation, precomputed on scattered
+    # points in absolute UTM 54N.  Vertical only -- there is no uE/uN, so the
+    # horizontal-push term cannot be applied.  The field covers a smaller box
+    # than the domain; outside it the deformation is taken as zero (its edge
+    # values are small but not zero: 0.18 m on UCSB3).
+    from scipy.interpolate import LinearNDInterpolator
+    from anuga.geospatial_data.geospatial_data import Geospatial_data
+    src = Geospatial_data(os.path.join('sources', a.scenario + '.pts'))
+    uZ = LinearNDInterpolator(src.get_data_points(absolute=True),
+                              np.asarray(src.get_attributes()),
+                              fill_value=0.0)(x + xll, y + yll)
+    uE = uN = np.zeros_like(uZ)
+    if a.push:
+        print(f'{a.scenario}.pts is vertical-only: no horizontal push')
+        a.push = False
+    slips = np.array([np.nan])
 else:
     uE, uN, uZ, slips = okl.kl_deformation(
         x, y, xoff=a.x0 - xll, yoff=a.y0 - yll,
@@ -151,6 +184,8 @@ Elevation[:] += uZ
 Stage[:]     += uZ + push
 if a.source == 'split':
     Mw = (np.log10(a.M0) - 9.1)/1.5
+elif a.source == 'pts':
+    Mw = np.nan
 else:
     Mw = (np.log10(40e9*a.length*a.width*slips.mean()) - 9.1)/1.5
 print(f'source: Mw {Mw:.2f}  mean slip {slips.mean():.1f} m  peak {slips.max():.1f} m  '
@@ -204,7 +239,7 @@ kappa = float(np.exp(np.sqrt(np.mean((np.log(ratio) - log_K)**2))))
 bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
-res = dict(tag=a.tag, push=bool(a.push), algorithm=a.flow_algorithm, dem=a.elevation_source, source=a.source, slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
+res = dict(tag=a.tag, push=bool(a.push), algorithm=a.flow_algorithm, beta=domain.beta_w, dem=a.elevation_source, source=a.source if a.source != 'pts' else f'pts:{a.scenario}', slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
            friction=a.friction, length=a.length, width=a.width, depth=a.depth,
            mean_slip=round(float(slips.mean()),2), peak_slip=round(float(slips.max()),2),
            uZ_max=round(float(uZ.max()),2), uZ_min=round(float(uZ.min()),2),
