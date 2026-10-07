@@ -79,13 +79,13 @@ Central config module imported by all simulation scripts. There is no CLI or con
 | `okada.py` | Okada (1985) elastic dislocation model — computes surface displacements (uE, uN, uZ) for a rectangular fault |
 | `okada_subfaults.py` | Divides a fault into sub-faults and sums their Okada displacements |
 | `okada_kl_subfaults.py` | Extends `okada_subfaults` with two slip fields: a KL random draw (`kl_deformation()`) and a smooth moment-normalised taper (`deterministic_slip()` / `deterministic_deformation()`). Both share `sum_subfault_deformation()` for the Okada summation |
-| `calibrate_deterministic.py` | Scriptable one-run calibration driver for either source (`--source det|kl`): builds the notebook's domain, applies the source, evolves, and appends DART peak / Aida K / &kappa; / bias / RMS / dry count to `calibration_results.jsonl` |
+| `calibrate_deterministic.py` | Scriptable one-run calibration driver (`--source det|kl|split|pts`): builds the notebook's domain, applies the source, evolves, and appends DART peak / Aida K / &kappa; / bias / RMS / dry count to `calibration_results.jsonl`. `--criterion strict` scores as the notebook does (default `loose` keeps the old rows comparable); `--dart-dt 15` samples DART 21418 every 15 s and fits the phase lag; `--source-delay` shifts the scored timing |
 | `setup_simulation.py` | Higher-level helpers: `create_domain()`, `apply_deformation()`, `evolve_domain()`, and gauge recording classes |
 | `project.py` | Scenario parameters, mesh polygons, resolution settings |
 | `tsunami_observations.py` | Loads the TTJS surveyed inundation/run-up heights for validation; subsetting by UTM extent or by gauge |
 
 ### Coordinate system
-Map and validation boxes are defined in degrees in `project.py` — `study_extent_ll = [140.70, 141.90, 37.50, 38.65]` and `sendai_extent_ll = [140.82, 141.36, 38.03, 38.42]`, `[lon_min, lon_max, lat_min, lat_max]` — and survey points are subset with `tsunami_observations.in_extent_ll`. They replace the UTM boxes `[475 000, 580 000, 4 150 000, 4 280 000]` and `[484 000, 531 500, 4 209 000, 4 252 500]`, and select 1765 rather than 1768 survey points in the study area. The notebook maps stay in the UTM plane (`ccrs.UTM(zone=54)`) and are framed with `set_extent(extent_ll, crs=ccrs.PlateCarree())`. Their gridlines are lat/lon either way. `calibrate_deterministic.py` still scores on the old UTM box.
+Map and validation boxes are defined in degrees in `project.py` — `study_extent_ll = [140.70, 141.90, 37.50, 38.65]` and `sendai_extent_ll = [140.82, 141.36, 38.03, 38.42]`, `[lon_min, lon_max, lat_min, lat_max]` — and survey points are subset with `tsunami_observations.in_extent_ll`. They replace the UTM boxes `[475 000, 580 000, 4 150 000, 4 280 000]` and `[484 000, 531 500, 4 209 000, 4 252 500]`, and select 1765 rather than 1768 survey points in the study area. The notebook maps stay in the UTM plane (`ccrs.UTM(zone=54)`) and are framed with `set_extent(extent_ll, crs=ccrs.PlateCarree())`. Their gridlines are lat/lon either way. `calibrate_deterministic.py` scores on the old UTM box by default and on `study_extent_ll` with `--criterion strict`.
 
 All simulations use **UTM Zone 54N**, set with `domain.set_epsg(32654)`. This replaced the older `domain.set_hemisphere('northern')` + `domain.set_zone(54)` pair — use `set_epsg` in new code. The two are equivalent for zone/hemisphere/EPSG, with one difference: `set_epsg` also populates `false_easting` from pyproj (0 → 500000, the correct UTM value), which is metadata written into `.sww` and surfaces as `Xshift` in `.prj` files produced by `sww2dem` (used by `ExportResults.py`). Note the ordering rule if you ever go back to the old calls — `set_zone` defaults the hemisphere to *southern* when it is still undefined, so `set_hemisphere` must come first.
 
@@ -138,7 +138,7 @@ These values are tied to the fixed KL code (`eigh`, normal Sobol deviates) — s
 
 ### Best configuration found
 
-> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term — DART 1.87 m, K 0.98, κ 1.64. See *Horizontal push*. Everything in this subsection predates that term and is kept for the record. The UCSB3 row is also superseded by *UCSB3 at beta 1.0*.
+> **Superseded.** The best configuration is now the split fault at the gCMT moment with the horizontal-push term and a broadened along-strike taper — see *Source location and the DART phase*. The intermediate *Horizontal push* result (DART 1.87 m, K 0.98, κ 1.64) ran at the old limiter beta 0.5. Everything in this subsection predates that term and is kept for the record. The UCSB3 row is also superseded by *UCSB3 at beta 1.0*.
 
 **UCSB3 source + `Tohoku.pts` elevation + Manning n = 0.05**, on the full mesh:
 
@@ -629,14 +629,14 @@ configuration at n = 0.036 the two criteria give:
 
 The model did not change: 188 points moved out of the comparison and into the
 `dry` count, which is where they belong. Part of the &kappa; floor was the
-search radius rather than model error. **`calibrate_deterministic.py` still
-uses the loose criterion**, so the 40-run record stays internally consistent --
-but driver and notebook numbers are no longer directly comparable, and any new
-comparison must state which criterion it used.
+search radius rather than model error. **`calibrate_deterministic.py` defaults
+to the loose criterion**, so the older record stays internally consistent;
+`--criterion strict` reproduces the notebook exactly (checked to the printed
+precision on 2026-10-07), and every row now records which one it used.
 The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
 deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
 
-#### Recalibration at DE_ader2 beta 1.0 (current)
+#### Recalibration at DE_ader2 beta 1.0
 
 ANUGA commit `1e6a7c1f` (2026-09-29) changed `DE_ader2`'s default limiter beta from 0.5 to 1.0 -- at 0.5 it kept only 32% of a propagating wave's amplitude on ANUGA's `deep_wave` test. **Everything calibrated in this file before 2026-09-30 ran at beta 0.5**, so it was tuned against that numerical damping. Same configuration on current ANUGA (open DEM, n = 0.037, gCMT moment; loose criterion):
 
@@ -647,7 +647,7 @@ ANUGA commit `1e6a7c1f` (2026-09-29) changed `DE_ader2`'s default limiter beta f
 
 Beta 0.5 reproduces the old numbers exactly, so the other half of that commit (Manning drag in the ADER predictor) has no measurable effect here. `calibrate_deterministic.py --beta` overrides the wet betas; each jsonl row records `beta`.
 
-Recalibrated at beta 1.0, pinned in the notebook with `domain.set_betas(1.0, 0.0, 1.0, 0.0, 1.0, 0.0)`:
+Recalibrated at beta 1.0, pinned in the notebook with `domain.set_betas(1.0, 0.0, 1.0, 0.0, 1.0, 0.0)`. **The source part of this is superseded** by *Source location and the DART phase* below, which returns to the gCMT moment with a broader taper; the beta finding stands.
 
 1. **M0 = 4.7e22 (Mw 9.05)** from DART: 1.880 m on the open DEM, 1.854 m on `pts`. The moment is now fitted -- 11% below gCMT, inside the published Mw 9.0-9.1 range and well within the uncertainty of the 40 GPa rigidity that converts slip to moment. Peak slip 87 m.
 2. **Friction per DEM**, from `notebook_tohoku_friction_calibration.ipynb` (strict criterion, `project.study_extent_ll`, 1765 points):
@@ -674,6 +674,32 @@ At beta 1.0 on `Tohoku.pts`, strict criterion:
 | 0.065 | 2.02 | 1.35 | 1.68 | &minus;0.49 | 5.17 | 280 |
 
 K = 1 at **n &asymp; 0.052**: &kappa; ~1.79, bias ~+0.8 m, RMS ~5.2, ~120 dry. **UCSB3 is no longer the best configuration.** Against the split fault at n = 0.048 on the same DEM (K 0.99, &kappa; 1.60, RMS 4.68, 161 dry, DART 1.85) it loses on &kappa;, RMS and DART -- its fixed deformation now overshoots DART 21418 by 8% and has no moment knob to correct it -- and wins only on inundation extent. The &kappa; dip at n = 0.065 (1.89 -> 1.68 -> 1.75) breaks the trend and is unexplained; left in, not smoothed.
+
+#### Source location and the DART phase (current)
+
+The notebook now runs **nothing fitted but friction**: the split fault at the trench anchor `(750290, 4181170)`, the **gCMT moment M0 = 5.3e22**, the shallow segment's along-strike taper widened to **`sig_u` 0.30** (deep segment stays 0.20), released at the **gCMT centroid time, 69 s** after the origin, with `friction = {'open': 0.042, 'pts': 0.046}`. Strict criterion, beta 1.0, measured 2026-10-07:
+
+| DEM | n | DART | lag | K | &kappa; | bias | RMS | dry |
+|---|------|------|------|------|------|-------|------|-----|
+| open | 0.042 | 1.88 | &minus;1.54 min | 1.00 | 1.58 | +0.17 | 4.00 | 276 |
+| pts | 0.046 | 1.84 | &minus;1.57 min | 1.01 | 1.62 | +0.19 | 4.39 | 161 |
+
+Peak slip 73 m (published near-trench 50-70 m), peak uplift 14.6 m. Against the configuration it replaces (M0 4.7e22 fitted, `sig_u` 0.20, n 0.045 / 0.048): same K, &kappa; and dry count, RMS 0.29 m better on `pts`, peak slip down from 87 m, and the DART waveform cross-correlation up from 0.70 to 0.80. **`sig_u` 0.20 was the reason the gCMT moment overshot DART by 13% at beta 1.0** -- the slip was concentrated too tightly, not too strong. 0.30 (sigma 120 km on the 400 km fault) matches the published ~240 km along-strike extent of slip above 20 m.
+
+**The DART phase is deliberately left unmatched: the model arrives ~1.6 min early.** How that was decided, in three stages run in this order (location, then moment, then friction):
+
+1. **Location from phase.** `calibrate_deterministic.py --dart-dt 15` samples the buoy every 15 s and fits the lag by cross-correlation against `21418_notide.txt` over 20-60 min (positive = model late). Nine published locations placed along strike (USGS hypocentre, ISC-GEM, USGS W-phase and Mwc, Duputel W-phase, gCMT, Hayes 2014 finite-fault centroid and peak slip; trench edge kept on the trench) and &plusmn;60 km across strike. The phase is **~6x more sensitive across strike** (0.07-0.12 min/km, steepening landward) **than along it** (0.015 min/km), and the two do not add linearly south of the baseline. Every published location along strike arrives early (&minus;1.4 to &minus;3.2 min, no delay); zero lag needs ~25-40 km landward, or -- with the 69 s delay -- the gCMT along-strike position at almost no across-strike shift.
+2. **Moment from the DART peak.** At the zero-lag gCMT position the buoy, north-east of the source, sees less of it: holding 1.87 m took **M0 5.78e22 (9% above gCMT) and 107 m of peak slip**. That run matched the phase to 0.02 min and gave K 0.98, &kappa; 1.61, RMS 4.40 at n 0.055 -- no better on the coast than the configuration above.
+3. **Friction from K**, as always.
+
+So the phase was traded for a physical slip. The residual is in the direction of what the model leaves out -- rupture kinematics, seawater compressibility and the elastic earth all delay the real wave -- so fitting it with location would absorb non-source physics. Things to carry away:
+
+- **One buoy gives one phase number, so location is a 1-D family**, not a point. Across strike it is steeply constrained; along strike barely. &kappa; varied 1.60-1.64 along the whole zero-lag line, so the coast does not pick a point on it either.
+- **The 69 s source delay is a pure time shift**, so `--source-delay` only shifts the scored lag and peak time; no rerun needed to try a different value. The notebook applies it to the DART plot as `source_delay`.
+- **The lag is independent of M0 and friction** (measured: identical to 0.01 min across every friction value and both DEMs within 0.03 min), so location can be swept at any moment.
+- **The trough is too deep** at every location (&minus;1.4 m modelled against &minus;0.3 m observed on the old taper). Location cannot fix waveform shape; `sig_u` 0.30 improved it.
+
+Rows are in `calibration_results.jsonl` with `criterion`, `source_delay_s`, `dart_lag_s`, `dart_xcorr`, `xt`/`yt` and the segment geometry recorded; tags `loc_*` (location sweep), `zl_*` (zero-lag line), `m0_a`/`fric_*` (the phase-matched source), `rec_*` (the shipped configuration). Their `.sww` files were deleted after scoring; `calib_<tag>_dart.npy` keeps each 15 s buoy series.
 
 #### What this supersedes
 

@@ -25,3 +25,5 @@ tohoku_open_dem*.jpg
 
 # cached Tohoku.pts interpolation onto a mesh (see calibrate_deterministic.py)
 _pts_elev_*.npy
+# DART 21418 series written by calibrate_deterministic.py --dart-dt
+calib_*_dart.npy
