@@ -34,6 +34,7 @@ Usage
 """
 
 import os
+import re
 
 import numpy as np
 
@@ -47,7 +48,30 @@ NCEI_RUNUP_URL = ('https://www.ngdc.noaa.gov/hazel/hazard-service/api/v1/'
                   'tsunamis/runups?tsunamiEventId=5413')
 
 
-def load_ttjs(filename=TTJS_CSV, types='IR', reliability=None, zone=54):
+# A survey mark is a tree mark if its 'target' or 'mark' field says it was read
+# off a tree: broken or damaged branches, bark or trunk damage, or debris caught
+# in branches.  On the Sendai plain these sit far above the water marks on
+# nearby buildings (16-20 m in the coastal pine forest at Ido, against 5.5-7.5 m
+# on the houses beside it), so they record splash, bore impact or floating
+# debris rather than a water level, and no depth-averaged model can reproduce
+# them.  TREE_MARK_EXCEPT removes the matches that are not on a tree: a pine
+# branch lodged against a building wall, and an erosion limit described by
+# exposed roots.
+TREE_MARK = re.compile(r'枝折|枝の損傷|枝の傷|枝にかかった|折れた枝|松の枝|木の枝|'
+                       r'幹の傷|樹皮|樹木|松の木|松林|木に|大木|'
+                       r'tree|branch|bark', re.IGNORECASE)
+TREE_MARK_EXCEPT = re.compile(r'建物|樹木の根')
+
+
+def is_tree_mark(target, mark):
+    """True if a TTJS point with these 'target' and 'mark' fields was read off
+    a tree; see TREE_MARK."""
+    text = f'{target} {mark}'
+    return bool(TREE_MARK.search(text)) and not TREE_MARK_EXCEPT.search(text)
+
+
+def load_ttjs(filename=TTJS_CSV, types='IR', reliability=None, zone=54,
+              drop_trees=False):
     """
     Load the TTJS survey points as a dict of arrays.
 
@@ -56,10 +80,13 @@ def load_ttjs(filename=TTJS_CSV, types='IR', reliability=None, zone=54):
                  mark), 'W' (too weak to measure).  None keeps everything.
     reliability  keep only these reliability grades, e.g. 'AB' for the clear
                  marks and reliable witness reports.  None keeps everything.
+    drop_trees   drop points read off trees (see TREE_MARK).  Off by default
+                 so existing calibration scores stay comparable.
 
     Returns keys: lon, lat, east, north (UTM `zone`), height (m, tide-corrected
     by TTJS), height_msl (m above mean sea level), runup_distance (m inland
-    from the shoreline, NaN where not surveyed), type, reliability, location.
+    from the shoreline, NaN where not surveyed), type, reliability, location,
+    target and mark (the survey's free-text description of what was measured).
 
     Heights are the 'height corrected by ttjt' column -- the one the survey
     group recommends -- and are NaN for the handful of points they could not
@@ -88,6 +115,8 @@ def load_ttjs(filename=TTJS_CSV, types='IR', reliability=None, zone=54):
             continue
         if not np.isfinite(col(row, 'height corrected by ttjt [m]')):
             continue
+        if drop_trees and is_tree_mark(row['target'], row['mark']):
+            continue
         # Three points carry no position (lon and/or lat are NaN); they cannot
         # be projected or plotted, so they go too.
         if not (np.isfinite(col(row, 'lon [deg]')) and
@@ -114,6 +143,8 @@ def load_ttjs(filename=TTJS_CSV, types='IR', reliability=None, zone=54):
         type=np.array([r['type'].strip() for r in keep]),
         reliability=np.array([r['reliability'].strip() for r in keep]),
         location=np.array([r['location'].strip() for r in keep]),
+        target=np.array([r['target'].strip() for r in keep]),
+        mark=np.array([r['mark'].strip() for r in keep]),
     )
 
 

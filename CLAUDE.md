@@ -633,6 +633,26 @@ search radius rather than model error. **`calibrate_deterministic.py` defaults
 to the loose criterion**, so the older record stays internally consistent;
 `--criterion strict` reproduces the notebook exactly (checked to the printed
 precision on 2026-10-07), and every row now records which one it used.
+
+**Tree marks are dropped (2026-10-20).** The notebook loads the survey with
+`load_ttjs(..., drop_trees=True)`, which removes the 120 points in the study box
+whose TTJS `target`/`mark` says they were read off a tree (broken branches,
+bark damage, debris in branches; pattern `tsunami_observations.TREE_MARK`).
+They record splash or bore impact, not a water level: at Ido on the Sendai
+plain broken pine branches read 16-20 m beside house water marks of 5.5-7.5 m,
+and they were 10 of the 13 Sendai-box marks above 12 m (the other three are
+building water marks and stay in). Dropping them leaves
+the whole-box K/&kappa; almost unchanged (open DEM: K 1.00 -> 0.98, &kappa; 1.58)
+but takes the Sendai-box RMS from 1.90 to 1.53 m. Pass `--drop-trees` with
+`--criterion strict` to reproduce the notebook; rows record `drop_trees`.
+
+**Score the Sendai box and the ria coast separately.** North and east of
+`sendai_extent_ll` (Oshika, Onagawa-Ogatsu) the ~250 m mesh on a 450 m DEM
+over-fills whole small bays for a frame or two, giving modelled heights of
+30-50 m against 6-18 m surveyed; all modelled heights above 20 m are there.
+It is beta-dependent: at beta 0.5 the maximum is ~35 m. On the open DEM
+without tree marks, Sendai box K 0.99, &kappa; 1.55, RMS 1.53 m; the rest
+K 0.97, &kappa; 1.62, RMS 5.93 m. A good pooled K hides the ria errors.
 The geometry is the published one: near-trench dip 3-5 deg steepening to ~12-15
 deg, the 80 x 250 km near-trench asperity, 200 km total width, gCMT moment.
 

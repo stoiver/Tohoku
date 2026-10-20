@@ -66,6 +66,10 @@ p.add_argument('--criterion', choices=['loose', 'strict'], default='loose',
                help='survey matching: loose = wet to 0.01 m within 1500 m on the old UTM '
                     'box (every row before 2026-10); strict = 0.10 m within 500 m on '
                     'project.study_extent_ll, as notebook_tohoku_open_elevation.ipynb scores')
+p.add_argument('--drop-trees', action='store_true',
+               help='drop survey marks read off trees (tsunami_observations.TREE_MARK), as '
+                    'the notebook does since 2026-10-20; with --criterion strict this '
+                    'reproduces the notebook')
 p.add_argument('--tag', default='det')
 p.add_argument('--results', default='calibration_results.jsonl')
 a = p.parse_args()
@@ -275,10 +279,12 @@ dart_tmin += a.source_delay/60.
 
 # Aida K / kappa over the close-up survey box
 if a.criterion == 'strict':
-    survey = in_extent_ll(load_ttjs(types='IR', reliability='AB'), project.study_extent_ll)
+    survey = in_extent_ll(load_ttjs(types='IR', reliability='AB', drop_trees=a.drop_trees),
+                          project.study_extent_ll)
     match_depth, match_radius = 0.10, 500.0
 else:
-    survey = in_extent(load_ttjs(types='IR', reliability='AB'), closeup_extent)
+    survey = in_extent(load_ttjs(types='IR', reliability='AB', drop_trees=a.drop_trees),
+                       closeup_extent)
     match_depth, match_radius = md, 1500.0
 wet = max_depth >= match_depth
 tree = cKDTree(np.column_stack([sp.xc[wet], sp.yc[wet]]))
@@ -300,7 +306,7 @@ bias = float(np.mean(h_model[paired] - h_obs[paired]))
 rms = float(np.sqrt(np.mean((h_model[paired] - h_obs[paired])**2)))
 
 res = dict(tag=a.tag, push=bool(a.push), algorithm=a.flow_algorithm, beta=domain.beta_w, dem=a.elevation_source, source=a.source if a.source != 'pts' else f'pts:{a.scenario}', slip=a.slip, split_frac=a.split_frac, M0=a.M0, Mw=round(Mw,3), sig_u=a.sig_u, v0=a.v0, sig_v=a.sig_v,
-           friction=a.friction, criterion=a.criterion, xt=a.xt, yt=a.yt,
+           friction=a.friction, criterion=a.criterion, drop_trees=a.drop_trees, xt=a.xt, yt=a.yt,
            dip1=a.dip1, width1=a.width1, top1=a.top1, dip2=a.dip2, width2=a.width2,
            source_delay_s=a.source_delay,
            dart_lag_s=None if dart_lag is None else round(dart_lag, 1),
